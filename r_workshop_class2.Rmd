@@ -1,0 +1,378 @@
+---
+title: "DataFrames & Packages in R"
+subtitle: "Mastering Vectorization and Modern R Tools"
+author: "R Workshop"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    theme: cosmo
+    highlight: tango
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 7,
+  fig.height = 4
+)
+```
+
+# Part 1: DataFrames Basics
+
+## What is a DataFrame?
+
+A DataFrame is a table with rows and columns. Each column can be a different type, but all must have the same length.
+
+```{r dataframe-creation}
+# Create a DataFrame
+df <- data.frame(
+  name = c("Alice", "Bob", "Carol"),
+  age = c(25, 30, 35),
+  score = c(85.5, 92.3, 78.9)
+)
+
+print(df)
+```
+
+## Exploring DataFrames
+
+```{r dataframe-explore}
+# View structure
+str(df)
+
+# Access columns
+df$name
+df[["age"]]
+
+# Access rows
+df[1, ]  # First row
+```
+
+---
+
+# Part 2: Vectorization vs Loops
+
+## Why Vectorize?
+
+Vectorization applies operations to entire vectors at once - it's **10-100x faster** than loops.
+
+```{r vectorization-demo}
+n <- 100000000
+x <- 1:n
+# Loop approach (slow)
+print(system.time({
+  result_loop <- numeric(n)
+  for (i in 1:n) {
+    result_loop[i] <- sqrt(x[i])
+  }
+}), digits = 7)
+# Vectorized approach (fast)
+print(system.time({
+  result_vec <- sqrt(x)
+}), digits = 7)
+```
+
+## Common Vectorized Functions
+
+```{r vectorized-functions}
+x <- c(1, 2, 3, 4, 5)
+
+# Numeric
+x + 10
+x^2
+sqrt(x)
+
+# Logical
+x > 3
+x == 4
+
+# Conditional
+ifelse(x > 3, "High", "Low")
+```
+
+---
+
+# Part 3: Essential Packages
+
+## Setup
+
+```{r load-packages}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+```
+
+## Sample Data
+
+```{r sample-data}
+patients <- data.frame(
+  name = c("Alice", "Bob", "Carol", "David", "Eve"),
+  age = c(25, 30, 35, 40, 28),
+  weight = c(65, 80, 70, 85, 62),
+  height = c(165, 180, 170, 175, 160),
+  treatment = c("A", "B", "A", "B", "A")
+)
+
+patients
+```
+
+## dplyr: The 5 Verbs
+
+### filter() - Subset rows
+
+```{r filter}
+
+patients %>%
+  filter(age > 30)
+```
+
+### select() - Choose columns
+
+```{r select}
+patients %>%
+  select(name, age, treatment)
+```
+
+### mutate() - Create columns
+
+```{r mutate}
+patients %>%
+  mutate(bmi = weight / (height/100)^2)
+```
+
+### arrange() - Sort rows
+
+```{r arrange}
+patients %>%
+  arrange(desc(age))
+```
+
+### summarize() - Aggregate data
+
+```{r summarize}
+patients %>%
+  group_by(treatment) %>%
+  summarize(
+    mean_age = mean(age),
+    count = n()
+  )
+```
+
+## Complete Pipeline with Pipes
+
+```{r pipeline}
+# Clean workflow using %>%
+results <- patients %>%
+  filter(age > 25) %>%
+  mutate(bmi = weight / (height/100)^2) %>%
+  group_by(treatment) %>%
+  summarize(avg_bmi = mean(bmi))
+
+print(results)
+```
+
+## tidyr: Reshape Data
+
+```{r tidyr}
+# Wide to Long
+wide_data <- data.frame(
+  patient = c("Alice", "Bob"),
+  week1 = c(120, 130),
+  week2 = c(118, 128)
+)
+
+wide_data
+
+long_data <- wide_data %>%
+  pivot_longer(
+    cols = starts_with("week"),
+    names_to = "timepoint",
+    values_to = "bp"
+  )
+
+print(long_data)
+```
+
+**Pro Tip:** Long format works best with ggplot2 and group_by().
+
+## data.table: For Big Data
+
+```{r datatable}
+library(data.table)
+
+dt <- as.data.table(patients)
+
+# Syntax: DT[i, j, by]
+# i = rows, j = columns, by = grouping
+
+dt[age > 30, .(name, age)]
+dt[, mean(age), by = treatment]
+```
+
+**Use data.table when:** datasets > 1GB or speed is critical.
+
+## Other Essential Packages
+
+```{r other-packages, eval=FALSE}
+
+
+# lubridate - Dates
+library(lubridate)
+ymd("2024-01-15")
+
+# stringr - Strings
+library(stringr)
+str_to_upper("hello")
+
+
+df <- your_data_frame
+ggplot(df, aes(x, y))
+
+# Or use a different name like:
+# This causes the error:
+ggplot(data, aes(x = bmi, y = age))
+
+# Should be:
+patients_bmi <- patients %>%
+  mutate(bmi = weight / (height/100)^2)
+
+ggplot(patients, aes(x = age, y = weight)) +
+  geom_point()
+
+
+# ggplot2 - Visualization
+patients_bmi <- patients %>%
+  mutate(bmi = weight / (height/100)^2)
+
+ggplot(patients_bmi, aes(x = age, y = bmi, color = treatment, size = weight)) +
+  geom_point(alpha = 0.7) +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "BMI vs Age by Treatment Group",
+    x = "Age (years)",
+    y = "BMI (kg/m²)",
+    color = "Treatment"
+  ) +
+  theme_minimal()
+```
+
+---
+
+# Part 4: Practical Example
+
+## Patient Data Analysis
+
+```{r practical-example}
+# Step 1: Create sample data
+set.seed(123)
+patient_data <- data.frame(
+  id = 1:50,
+  age = sample(25:65, 50, replace = TRUE),
+  weight = rnorm(50, mean = 75, sd = 10),
+  height = rnorm(50, mean = 170, sd = 8),
+  treatment = sample(c("A", "B"), 50, replace = TRUE),
+  outcome = sample(c("Improved", "No Change"), 50, 
+                   replace = TRUE, prob = c(0.7, 0.3))
+)
+
+# Step 2: Clean and transform
+patient_clean <- patient_data %>%
+  mutate(
+    bmi = weight / (height/100)^2,
+    bmi_cat = ifelse(bmi < 25, "Normal", "Overweight")
+  )
+
+# Step 3: Analyze
+summary_stats <- patient_clean %>%
+  group_by(treatment) %>%
+  summarize(
+    n = n(),
+    mean_bmi = mean(bmi),
+    pct_improved = mean(outcome == "Improved") * 100
+  )
+
+print(summary_stats)
+
+# Step 4: Visualize
+ggplot(patient_clean, aes(x = treatment, y = bmi, fill = treatment)) +
+  geom_boxplot() +
+  labs(title = "BMI by Treatment Group") +
+  theme_minimal()
+```
+
+---
+
+# Best Practices
+
+## DO ✓
+
+```{r do-practices, eval=FALSE}
+# Always vectorize
+x^2 + sqrt(x)  # Good
+
+# Pre-allocate if loops needed
+# Calculate running total where each step depends on previous result
+n <- 5
+x <- c(10, 5, 3, 7, 2)
+
+# Pre-allocate result vector
+result <- numeric(n)
+result[1] <- x[1]  # First value
+
+# Each value = previous result + current x
+for (i in 2:n) {
+  result[i] <- result[i-1] + x[i]
+}
+
+print(result)  # 10, 15, 18, 25, 27
+
+# Use data.table for big data
+library(data.table)
+```
+
+## DON'T ✗
+
+```{r dont-practices, eval=FALSE}
+# Don't loop when you can vectorize
+for (i in 1:n) result[i] <- x[i] * 2  # Bad
+result <- x * 2  # Good
+
+# Don't grow vectors
+result <- c()
+for (i in 1:n) result <- c(result, x[i])  # Very slow!
+```
+
+---
+
+# Key Takeaways
+
+- **Vectorization is 10-100x faster** than loops
+- **dplyr** for readable code, **data.table** for big data
+- **Pipes (`%>%`)** create clear workflows
+- **tidyverse** handles 90% of data tasks
+
+---
+
+# Resources
+
+**Book:** R for Data Science - https://r4ds.had.co.nz/
+
+**Documentation:**
+- dplyr: https://dplyr.tidyverse.org/
+- data.table: https://rdatatable.gitlab.io/data.table/
+
+**Cheatsheets:** https://www.rstudio.com/resources/cheatsheets/
+
+**Community:**
+- RStudio Community: https://community.rstudio.com
+- Stack Overflow: [r] tag
+
+---
+
+**Happy Coding with R!**
