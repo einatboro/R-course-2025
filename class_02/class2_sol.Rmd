@@ -1,0 +1,596 @@
+---
+title: "Practice Exercises - SOLUTIONS"
+author: "Einat Borohovich"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Base Datasets
+
+These datasets are used throughout the examples and solutions.
+
+```{r base-data}
+# Sample patient data with lab values
+set.seed(123)
+patient_data <- data.frame(
+  patient_id = 101:150,
+  age = sample(45:85, 50, replace = TRUE),
+  creatinine = round(rnorm(50, mean = 1.2, sd = 0.4), 2),
+  egfr = round(rnorm(50, mean = 65, sd = 20), 1),
+  gender = sample(c("M", "F"), 50, replace = TRUE)
+)
+
+# Sample diabetes patient data
+diabetes_patients <- data.frame(
+  patient_id = 201:250,
+  diabetes_type = sample(c("Type 1", "Type 2", "Prediabetes"), 50, 
+                         replace = TRUE, prob = c(0.15, 0.65, 0.20)),
+  hba1c = round(rnorm(50, mean = 7.5, sd = 1.5), 1),
+  glucose = round(rnorm(50, mean = 140, sd = 30), 0),
+  age = sample(35:75, 50, replace = TRUE)
+)
+```
+
+---
+
+# Teaching Notes
+
+This solution guide provides:
+- Complete working code for all exercises
+- Clinical context and explanations
+- Alternative approaches where applicable
+
+---
+
+# Exercise 1: Creating and Exploring Patient DataFrames
+
+## 1.1 Create a Patient DataFrame
+
+**Solution:**
+```{r create-dataframe-solution}
+# Create the patients dataframe
+patients <- data.frame(
+  patient_id = c(101, 102, 103, 104, 105, 106),
+  age = c(45, 32, 67, 54, 28, 71),
+  gender = c("M", "F", "M", "F", "M", "F"),
+  systolic_bp = c(120, 118, 145, 135, 110, 150),
+  has_diabetes = c(TRUE, FALSE, TRUE, FALSE, FALSE, TRUE)
+)
+
+print(patients)
+```
+
+**Teaching points:**
+- Column names should be informative (`systolic_bp` not just `bp`)
+- Logical vectors (TRUE/FALSE) are perfect for binary clinical variables
+- Using `c()` to concatenate values is fundamental
+
+## 1.2 Explore Your Data
+
+**Solution (matching homework):**
+```{r explore-dataframe-solution}
+# a) Structure
+str(patients)
+
+# b) First 3 rows
+head(patients, 3)
+
+# c) Mean age
+mean(patients$age)
+
+# d) Count diabetes patients
+sum(patients$has_diabetes)
+```
+
+**Enhanced output (with better formatting):**
+```{r explore-enhanced}
+# Same commands but with nice output
+cat("Mean age:", mean(patients$age), "years\n")
+cat("Patients with diabetes:", sum(patients$has_diabetes), "out of", nrow(patients), "\n")
+```
+
+**Alternative solutions students might use:**
+```{r alternatives-1}
+# For counting diabetes patients:
+table(patients$has_diabetes)  # Shows both TRUE and FALSE counts
+nrow(patients[patients$has_diabetes == TRUE, ])  # Works but verbose
+length(which(patients$has_diabetes))  # Also works
+```
+
+**Common mistakes:**
+- Forgetting the `$` when accessing columns
+- Using `length()` instead of `nrow()` for counting rows
+- Not understanding that `sum()` on logical vectors counts TRUE values
+
+---
+
+# Exercise 2: Why Vectorization Matters for Clinical Data
+
+## 2.1 Speed Comparison: Temperature Conversion
+
+**Solution:**
+```{r temperature-conversion-solution}
+set.seed(123)
+
+# Use 100 million values to show clear timing difference
+n <- 100000000
+celsius <- runif(n, min = 35, max = 40)
+
+# METHOD 1: Loop (slow)
+fahrenheit_loop <- numeric(n)
+time_loop <- system.time({
+  for(i in 1:n) {
+    fahrenheit_loop[i] <- (celsius[i] * 9/5) + 32
+  }
+})
+
+# METHOD 2: Vectorized (fast)
+time_vector <- system.time({
+  fahrenheit_vector <- (celsius * 9/5) + 32
+})
+
+# Results with high precision
+cat("Loop time:", sprintf("%.6f", time_loop[3]), "seconds\n")
+cat("Vectorized time:", sprintf("%.6f", time_vector[3]), "seconds\n")
+if(time_vector[3] > 0) {
+  cat("Speedup:", sprintf("%.1fx", time_loop[3] / time_vector[3]), "faster\n")
+} else {
+  cat("Vectorized operation is significantly faster!\n")
+}
+
+# Verify identical results (check first 1000 to save time)
+all.equal(fahrenheit_loop[1:1000], fahrenheit_vector[1:1000])
+```
+
+**Teaching points:**
+- Formula: `(celsius * 9/5) + 32`
+- Loop version: `fahrenheit_loop[i] <- (celsius[i] * 9/5) + 32`
+- Vectorized version: `fahrenheit_vector <- (celsius * 9/5) + 32`
+- The vectorized version is typically 50-100x faster
+- With 100 million values, loop takes many seconds, vectorized takes < 1 second
+- This speed difference is critical when working with large clinical datasets
+
+## 2.2 BMI Classification - Practical Vectorization
+
+**Solution:**
+```{r weight-analysis-solution}
+weights_kg <- c(55, 72, 68, 95, 58, 81, 104, 63, 77, 89)
+
+# Convert to pounds
+weights_lbs <- weights_kg * 2.20462
+
+# Categorize using nested ifelse (most common approach)
+weight_category <- ifelse(weights_kg < 60, "Underweight",
+                         ifelse(weights_kg <= 90, "Normal", "Overweight"))
+
+# Display results
+results <- data.frame(
+  kg = weights_kg,
+  lbs = round(weights_lbs, 1),
+  category = weight_category
+)
+print(results)
+```
+
+**Teaching points:**
+- `ifelse()` is vectorized - it processes all values at once
+- Nested `ifelse()` for multiple categories is the standard approach you learned in class
+
+---
+
+# Exercise 3: Using dplyr for Clinical Data Analysis
+
+## 3.1 Filter, Select, and Sort
+
+**Solution:**
+```{r dplyr-filter-solution, message=FALSE}
+library(dplyr)
+
+result <- mtcars %>%
+  filter(mpg > 20 & hp > 100) %>%
+  select(mpg, hp, wt) %>%
+  arrange(desc(mpg))
+
+print(result)
+```
+
+**Alternative without pipe:**
+```{r no-pipe}
+# Same result without %>%
+result_no_pipe <- arrange(
+  select(
+    filter(mtcars, mpg > 20 & hp > 100),
+    mpg, hp, wt
+  ),
+  desc(mpg)
+)
+```
+
+**Clinical translation example:**
+```{r clinical-example}
+# Using the patient_data we created earlier
+patient_results <- patient_data %>%
+  filter(age > 65 & creatinine > 1.5) %>%  # High-risk elderly
+  select(patient_id, age, creatinine, egfr) %>%
+  arrange(desc(creatinine))  # Highest risk first
+
+print(patient_results)
+```
+
+
+
+## 3.2 Create New Columns with mutate()
+
+**Solution:**
+```{r dplyr-mutate-solution}
+# First add weight and height columns
+patients_with_data <- patients %>%
+  mutate(
+    weight = c(70, 65, 80, 72, 58, 85),
+    height_m = c(1.75, 1.68, 1.82, 1.70, 1.65, 1.78)
+  )
+
+# Now calculate BMI
+patients_with_bmi <- patients_with_data %>%
+  mutate(
+    bmi = weight / (height_m^2)
+  )
+
+print(patients_with_bmi)
+```
+
+**Alternative - combine in one step:**
+```{r mutate-alternative}
+# Can also do it all at once
+patients_with_bmi_v2 <- patients %>%
+  mutate(
+    weight = c(70, 65, 80, 72, 58, 85),
+    height_m = c(1.75, 1.68, 1.82, 1.70, 1.65, 1.78),
+    bmi = weight / (height_m^2)  # Can use columns created in same mutate()
+  )
+
+print(patients_with_bmi_v2)
+```
+
+**Teaching points:**
+- `mutate()` creates new columns or modifies existing ones
+- Can create multiple columns in one `mutate()` call
+- New columns can use other columns created in the same `mutate()`
+- BMI formula: weight (kg) / height (m)²
+
+## 3.3 Group and Summarize Lab Results
+
+**Solution:**
+```{r dplyr-summarize-solution}
+summary_stats <- mtcars %>%
+  group_by(cyl) %>%
+  summarize(
+    avg_mpg = round(mean(mpg), 2),
+    avg_hp = round(mean(hp), 2)
+  )
+
+print(summary_stats)
+```
+
+**Alternative rounding approaches:**
+```{r rounding-alternatives}
+# Method 1: Round after calculation (shown above)
+
+# Method 2: Round all at once
+mtcars %>%
+  group_by(cyl) %>%
+  summarize(avg_mpg = mean(mpg), avg_hp = mean(hp)) %>%
+  mutate(across(where(is.numeric), ~round(., 2)))
+
+# Method 3: Using format for display only
+mtcars %>%
+  group_by(cyl) %>%
+  summarize(avg_mpg = mean(mpg), avg_hp = mean(hp)) %>%
+  mutate(across(where(is.numeric), ~sprintf("%.2f", .)))
+```
+
+**Clinical example:**
+```{r clinical-group}
+# Calculate mean HbA1c by diabetes type using the diabetes_patients data
+diabetes_summary <- diabetes_patients %>%
+  group_by(diabetes_type) %>%
+  summarize(
+    n_patients = n(),
+    mean_hba1c = round(mean(hba1c, na.rm = TRUE), 1),
+    mean_glucose = round(mean(glucose, na.rm = TRUE), 1)
+  )
+
+print(diabetes_summary)
+```
+
+---
+
+# Exercise 4: Reshaping Data with tidyr
+
+**Solution:**
+```{r tidyr-solution}
+library(tidyr)
+
+bp_wide <- data.frame(
+  patient_id = c(1, 2, 3),
+  visit_1 = c(120, 135, 118),
+  visit_2 = c(122, 138, 116),
+  visit_3 = c(119, 140, 115)
+)
+
+# Convert to long format (matching class example)
+bp_long <- bp_wide %>%
+  pivot_longer(
+    cols = starts_with("visit_"),
+    names_to = "visit",
+    values_to = "systolic_bp"
+  )
+
+print(bp_long)
+```
+
+**Note:** The visit column will contain "visit_1", "visit_2", "visit_3". This matches what was taught in class.
+
+**Why long format matters - demonstration:**
+```{r long-format-benefits}
+# Now we can easily plot trends
+library(ggplot2)
+
+ggplot(bp_long, aes(x = visit, y = systolic_bp, group = patient_id, color = factor(patient_id))) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Blood Pressure Trends by Patient",
+       x = "Visit", y = "Systolic BP (mmHg)",
+       color = "Patient ID") +
+  theme_minimal()
+
+# Or calculate change from baseline
+bp_long %>%
+  group_by(patient_id) %>%
+  mutate(change_from_baseline = systolic_bp - first(systolic_bp))
+```
+
+**Teaching points:**
+- Long format is essential for: time series plots, mixed models, calculating changes
+- Wide format is better for: viewing, data entry, simple comparisons
+- Most statistical functions expect long format
+
+---
+
+# Exercise 5: Visualizing Data with ggplot2
+
+**Solution:**
+```{r visualization-solution}
+library(ggplot2)
+
+# Add BMI to patients
+patients_complete <- patients %>%
+  mutate(
+    weight = c(70, 65, 80, 72, 58, 85),
+    height_m = c(1.75, 1.68, 1.82, 1.70, 1.65, 1.78),
+    bmi = weight / (height_m^2)
+  )
+
+# Create scatter plot
+ggplot(patients_complete, aes(x = age, y = bmi, color = has_diabetes)) +
+  geom_point(size = 3) +
+  labs(
+    title = "BMI vs Age by Diabetes Status",
+    x = "Age (years)",
+    y = "BMI (kg/m²)",
+    color = "Diabetes"
+  ) +
+  theme_minimal()
+```
+
+**Alternative with better colors:**
+```{r viz-enhanced}
+ggplot(patients_complete, aes(x = age, y = bmi, color = has_diabetes)) +
+  geom_point(size = 4, alpha = 0.7) +
+  scale_color_manual(values = c("FALSE" = "#2ecc71", "TRUE" = "#e74c3c"),
+                     labels = c("No", "Yes")) +
+  labs(
+    title = "BMI vs Age by Diabetes Status",
+    x = "Age (years)",
+    y = "BMI (kg/m²)",
+    color = "Has Diabetes"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+**Teaching points:**
+- Basic ggplot structure: `ggplot(data, aes()) + geom_*()`
+- `aes()` maps data to visual properties (x, y, color, size)
+- Add layers with `+`
+- `theme_minimal()` gives clean appearance
+
+---
+
+# Exercise 6: Complete Analysis Pipeline
+
+**Solution:**
+```{r combined-solution}
+# Task 1: Categorize blood pressure
+patients$bp_category <- ifelse(patients$systolic_bp < 120, "Normal",
+                              ifelse(patients$systolic_bp < 140, "Elevated", "Hypertension"))
+
+print(patients)
+
+# Task 2: Calculate average BP by category (matching homework)
+patients %>%
+  group_by(bp_category) %>%
+  summarize(
+    n_patients = n(),
+    avg_bp = round(mean(systolic_bp), 1)
+  )
+```
+
+**Enhanced version with additional statistics:**
+```{r combined-enhanced}
+# You can add more summary statistics for deeper analysis
+bp_summary <- patients %>%
+  group_by(bp_category) %>%
+  summarize(
+    n_patients = n(),
+    avg_bp = round(mean(systolic_bp), 1),
+    min_bp = min(systolic_bp),
+    max_bp = max(systolic_bp)
+  ) %>%
+  arrange(desc(avg_bp))  # Order by severity
+
+print(bp_summary)
+```
+
+**Enhanced visualization:**
+```{r combined-viz}
+# Visualize the distribution
+library(ggplot2)
+
+ggplot(patients, aes(x = bp_category, y = systolic_bp, fill = bp_category)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, alpha = 0.5) +
+  scale_fill_manual(values = c("Normal" = "#2ecc71", 
+                                "Elevated" = "#f39c12", 
+                                "Hypertension" = "#e74c3c")) +
+  labs(title = "Blood Pressure Distribution by Category",
+       x = "BP Category", y = "Systolic BP (mmHg)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+**Alternative categorization using case_when:**
+```{r case-when-alternative}
+# Using case_when (cleaner for multiple conditions)
+patients <- patients %>%
+  mutate(bp_category_v2 = case_when(
+    systolic_bp < 120 ~ "Normal",
+    systolic_bp < 140 ~ "Elevated",
+    TRUE ~ "Hypertension"
+  ))
+```
+
+---
+
+# Additional Teaching Examples
+
+## Example 1: Complete Clinical Workflow
+
+```{r complete-workflow}
+# Simulate patient data
+set.seed(456)
+n_patients <- 100
+
+clinical_data <- data.frame(
+  patient_id = 1:n_patients,
+  age = sample(25:85, n_patients, replace = TRUE),
+  gender = sample(c("M", "F"), n_patients, replace = TRUE),
+  systolic_bp = round(rnorm(n_patients, mean = 130, sd = 15)),
+  diastolic_bp = round(rnorm(n_patients, mean = 80, sd = 10)),
+  glucose = round(rnorm(n_patients, mean = 100, sd = 20)),
+  has_diabetes = sample(c(TRUE, FALSE), n_patients, replace = TRUE, prob = c(0.15, 0.85))
+)
+
+# Complete analysis pipeline
+analysis_results <- clinical_data %>%
+  # Add computed variables
+  mutate(
+    bp_category = case_when(
+      systolic_bp < 120 ~ "Normal",
+      systolic_bp < 140 ~ "Elevated",
+      TRUE ~ "Hypertension"
+    ),
+    glucose_category = ifelse(glucose < 100, "Normal", "Impaired")
+  ) %>%
+  # Filter to high-risk patients
+  filter(systolic_bp >= 140 | glucose >= 126) %>%
+  # Group analysis
+  group_by(bp_category, has_diabetes) %>%
+  summarize(
+    n = n(),
+    mean_age = round(mean(age), 1),
+    mean_glucose = round(mean(glucose), 1),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(mean_glucose))
+
+print(analysis_results)
+```
+
+## Example 2: Time Series Data
+
+```{r time-series}
+# Patient lab values over time
+lab_data <- data.frame(
+  patient_id = rep(1:3, each = 4),
+  date = rep(seq(as.Date("2025-01-01"), by = "1 week", length.out = 4), 3),
+  creatinine = c(1.1, 1.3, 1.5, 1.4,  # Patient 1
+                 0.9, 0.9, 1.0, 0.9,  # Patient 2
+                 1.8, 2.1, 2.3, 2.5)  # Patient 3
+)
+
+# Calculate changes from baseline
+lab_trends <- lab_data %>%
+  group_by(patient_id) %>%
+  arrange(date) %>%
+  mutate(
+    baseline = first(creatinine),
+    change = creatinine - baseline,
+    pct_change = round((change / baseline) * 100, 1)
+  ) %>%
+  ungroup()
+
+print(lab_trends)
+
+# Identify worsening cases
+worsening <- lab_trends %>%
+  filter(pct_change > 20) %>%
+  select(patient_id, date, creatinine, pct_change)
+
+print("Patients with >20% increase in creatinine:")
+print(worsening)
+```
+
+---
+
+# Common Student Questions & Answers
+
+**Q: When should I use %>% vs regular function calls?**
+A: Use %>% when you have multiple steps. If you're only doing one operation, either is fine. The pipe makes code more readable when you have 3+ operations.
+
+**Q: What's the difference between filter() and subset()?**
+A: `filter()` is from dplyr and works better with pipes. `subset()` is base R. Use `filter()` for consistency with dplyr.
+
+**Q: Why does vectorization matter if my dataset is small?**
+A: Two reasons: (1) It's good practice for when you work with larger data, (2) Even with small data, it makes code cleaner and more readable.
+
+**Q: Should I always use long format?**
+A: No - use long for: plotting, modeling, calculating changes. Use wide for: viewing data, entering data, simple reports.
+
+**Q: What if I have missing values (NA)?**
+A: Most functions have `na.rm = TRUE` parameter:
+```{r na-example}
+values_with_na <- c(120, 130, NA, 140, 125)
+mean(values_with_na)  # Returns NA
+mean(values_with_na, na.rm = TRUE)  # Returns 128.75
+```
+
+---
+
+# Summary of Key Concepts
+
+1. **Vectorization > Loops**: Always prefer vectorized operations
+2. **dplyr verbs**: filter, select, mutate, group_by, summarize
+3. **Pipe operator %>%**: Chains operations left to right
+4. **Data shapes**: Wide for viewing, long for analysis
+5. **Functions**: Reusable code for repeated tasks
+
