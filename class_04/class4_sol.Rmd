@@ -1,0 +1,428 @@
+---
+title: "Week 4 Homework SOLUTIONS: Descriptive Statistics & Hypothesis Testing"
+author: "Einat Borohovich"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Instructions
+
+This is the **SOLUTION FILE** for Week 4 homework.
+
+**Topics covered:**
+- Descriptive statistics: mean, median, mode, variance, standard deviation
+- Hypothesis testing: t-tests (one-sample, two-sample, paired) and chi-square tests
+- Checking t-test assumptions
+
+---
+
+# Dataset: Emergency Room Patient Data
+
+We'll use a dataset of patients admitted to the emergency room.
+
+```{r}
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+
+# Load the data
+set.seed(123)
+er_data <- data.frame(
+  patient_id = 1:80,
+  age = round(rnorm(80, mean = 45, sd = 15)),
+  heart_rate = round(rnorm(80, mean = 85, sd = 15)),
+  temperature = round(rnorm(80, mean = 37.5, sd = 1.2), 1),
+  gender = sample(c("Male", "Female"), 80, replace = TRUE),
+  smoker = sample(c("Yes", "No"), 80, replace = TRUE, prob = c(0.25, 0.75)),
+  department = sample(c("Cardiology", "General"), 80, replace = TRUE)
+)
+
+# View first few rows
+head(er_data)
+```
+
+---
+
+# Part 1: Descriptive Statistics
+
+## Exercise 1.1: Calculate Mean
+
+Calculate the mean heart rate for all patients.
+
+```{r}
+# Calculate mean heart rate
+mean_hr <- mean(er_data$heart_rate)
+mean_hr
+```
+
+**Question:** What is the average heart rate? **`r round(mean_hr, 2)` bpm**
+
+---
+
+## Exercise 1.2: Calculate Median
+
+Calculate the median temperature for all patients.
+
+```{r}
+# Calculate median temperature
+median_temp <- median(er_data$temperature)
+median_temp
+```
+
+**Question:** What is the median temperature? **`r median_temp`°C**
+
+---
+
+## Exercise 1.3: Find the Mode
+
+Find the most common gender in the dataset.
+
+```{r}
+# Create a frequency table for gender
+gender_table <- table(er_data$gender)
+gender_table
+
+# Identify which gender appears most often
+mode_gender <- names(which.max(gender_table))
+mode_gender
+```
+
+**Question:** What is the most common gender? **`r mode_gender`** (appears `r max(gender_table)` times)
+
+---
+
+## Exercise 1.4: Calculate Variance and Standard Deviation 
+
+Calculate the variance and standard deviation of age.
+
+```{r}
+# Calculate variance of age
+var_age <- var(er_data$age)
+var_age
+
+# Calculate standard deviation of age
+sd_age <- sd(er_data$age)
+sd_age
+
+# Verify that SD = sqrt(variance)
+sqrt(var_age)
+sd_age
+```
+
+**Questions:**
+- Variance = **`r round(var_age, 2)`**
+- Standard Deviation = **`r round(sd_age, 2)`**
+- Are they related as expected (SD = √variance)? **Yes, `r round(sd_age, 2)` = √`r round(var_age, 2)`**
+
+---
+
+## Exercise 1.5: Visualize with Histogram
+
+Create a histogram of heart rate showing the mean and median as vertical lines.
+
+```{r}
+# Calculate mean and median heart rate first
+mean_hr <- mean(er_data$heart_rate)
+median_hr <- median(er_data$heart_rate)
+
+# Create histogram with ggplot2
+ggplot(er_data, aes(x = heart_rate)) +
+  geom_histogram(bins = 15, fill = "steelblue", alpha = 0.7, color = "white") +
+  geom_vline(xintercept = mean_hr, color = "red", 
+             linetype = "dashed", linewidth = 1.2) +
+  geom_vline(xintercept = median_hr, color = "darkgreen", 
+             linetype = "solid", linewidth = 1.2) +
+  annotate("text", x = mean_hr + 8, y = 12, 
+           label = paste("Mean =", round(mean_hr, 1)), 
+           color = "red", size = 4, fontface = "bold") +
+  annotate("text", x = median_hr - 8, y = 10, 
+           label = paste("Median =", round(median_hr, 1)), 
+           color = "darkgreen", size = 4, fontface = "bold") +
+  labs(title = "Distribution of Heart Rate",
+       x = "Heart Rate (bpm)", 
+       y = "Number of Patients") +
+  theme_minimal()
+```
+
+**Interpretation:** The histogram shows the distribution of heart rates. Mean = `r round(mean_hr, 1)` bpm, Median = `r round(median_hr, 1)` bpm. They are very close, suggesting a relatively symmetric distribution.
+
+---
+
+## Exercise 1.6: Create a Boxplot
+
+Create a boxplot comparing heart rate by gender.
+
+```{r}
+# Create boxplot
+ggplot(er_data, aes(x = gender, y = heart_rate, fill = gender)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(title = "Heart Rate by Gender",
+       x = "Gender",
+       y = "Heart Rate (bpm)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+**Interpretation:** The boxplots show the distribution of heart rate for each gender, including median, quartiles, and any outliers.
+
+---
+
+# Part 2: Checking T-Test Assumptions
+
+Before running t-tests on heart rate data, check the assumptions.
+
+## Exercise 2.1: Check if Data is Continuous 
+
+```{r}
+# Check the data type of heart_rate
+class(er_data$heart_rate)
+
+# Look at summary statistics
+summary(er_data$heart_rate)
+```
+
+**Question:** Is heart_rate continuous? **Yes, it is numeric data (integer values representing continuous measurements).**
+
+---
+
+## Exercise 2.2: Check Normality
+
+Create a histogram and Q-Q plot to check if heart rate is approximately normal.
+
+```{r}
+# Create histogram of heart_rate
+ggplot(er_data, aes(x = heart_rate)) +
+  geom_histogram(bins = 15, fill = "steelblue", alpha = 0.7, color = "white") +
+  labs(title = "Check for Normality: Histogram",
+       subtitle = "Should be roughly bell-shaped",
+       x = "Heart Rate (bpm)", 
+       y = "Count") +
+  theme_minimal()
+
+# Create Q-Q plot
+ggplot(er_data, aes(sample = heart_rate)) +
+  stat_qq(color = "steelblue", size = 2) +
+  stat_qq_line(color = "red", linetype = "dashed", linewidth = 1) +
+  labs(title = "Check for Normality: Q-Q Plot",
+       subtitle = "Points should fall along the red line",
+       x = "Theoretical Quantiles", 
+       y = "Sample Quantiles") +
+  theme_minimal()
+
+# Shapiro-Wilk test
+shapiro.test(er_data$heart_rate)
+```
+
+**Question:** Does the data appear approximately normal? **Yes, the histogram is roughly bell-shaped and the Q-Q plot points fall reasonably along the line. The Shapiro-Wilk test p-value is `r round(shapiro.test(er_data$heart_rate)$p.value, 3)`, which is `r ifelse(shapiro.test(er_data$heart_rate)$p.value > 0.05, "> 0.05 (normal)", "< 0.05 (not perfectly normal, but with n=80, Central Limit Theorem applies)")`. Additionally, n = 80 > 30, so t-test is appropriate.**
+
+---
+
+## Exercise 2.3: Check Independence 
+
+```{r}
+# Check if all patient_ids are unique
+length(unique(er_data$patient_id))
+nrow(er_data)
+
+# Are they equal?
+length(unique(er_data$patient_id)) == nrow(er_data)
+```
+
+**Question:** Are observations independent? **Yes, each patient has a unique ID (80 unique IDs for 80 rows), so observations are independent.**
+
+---
+
+# Part 3: Hypothesis Testing - T-Tests 
+
+## Exercise 3.1: One-Sample T-Test 
+
+Test if the average temperature is **higher than** normal body temperature (37.0°C).
+
+```{r}
+# Perform one-sample t-test
+# H0: mean temperature ≤ 37.0
+# H1: mean temperature > 37.0
+t_test_temp <- t.test(er_data$temperature, 
+                      mu = 37.0, 
+                      alternative = "greater")
+
+t_test_temp
+```
+
+**Questions:**
+- p-value = **`r format.pval(t_test_temp$p.value, digits = 3)`**
+- Is temperature significantly higher than 37.0°C? (p < 0.05) **`r ifelse(t_test_temp$p.value < 0.05, "Yes", "No")`, since p `r ifelse(t_test_temp$p.value < 0.05, "< 0.05", "≥ 0.05")` we `r ifelse(t_test_temp$p.value < 0.05, "reject", "fail to reject")` the null hypothesis.**
+
+**Interpretation:** The mean temperature in our sample is `r round(t_test_temp$estimate, 2)`°C. `r ifelse(t_test_temp$p.value < 0.05, "This is significantly higher than normal body temperature (37.0°C).", "This is not significantly higher than normal body temperature (37.0°C).")`
+
+---
+
+## Exercise 3.2: Two-Sample T-Test 
+
+Test if heart rate differs between males and females.
+
+```{r}
+# Before testing, check if variances are similar
+# Calculate variance by gender
+er_data %>%
+  group_by(gender) %>%
+  summarize(
+    n = n(),
+    mean_hr = mean(heart_rate),
+    var_hr = var(heart_rate),
+    sd_hr = sd(heart_rate)
+  )
+
+# Perform two-sample t-test
+# H0: mean_male = mean_female
+# H1: mean_male ≠ mean_female
+t_test_gender <- t.test(heart_rate ~ gender, data = er_data)
+
+t_test_gender
+```
+
+**Questions:**
+- p-value = **`r format.pval(t_test_gender$p.value, digits = 3)`**
+- Do males and females have significantly different heart rates? **`r ifelse(t_test_gender$p.value < 0.05, "Yes", "No")`, since p `r ifelse(t_test_gender$p.value < 0.05, "< 0.05", "≥ 0.05")` we `r ifelse(t_test_gender$p.value < 0.05, "reject", "fail to reject")` the null hypothesis.**
+
+**Interpretation:** `r ifelse(t_test_gender$p.value < 0.05, "There is a significant difference in heart rate between males and females.", "There is no significant difference in heart rate between males and females.")`
+
+---
+
+## Exercise 3.3: Paired T-Test
+
+Create before/after data and test if heart rate changed after treatment.
+
+```{r}
+# Create paired data (first 40 patients, measured twice)
+set.seed(456)
+treatment_data <- data.frame(
+  patient_id = 1:40,
+  hr_before = round(rnorm(40, mean = 95, sd = 12)),
+  hr_after = round(rnorm(40, mean = 85, sd = 12))
+)
+
+# Perform paired t-test
+# H0: mean difference = 0
+# H1: mean difference ≠ 0
+t_test_paired <- t.test(treatment_data$hr_before, 
+                        treatment_data$hr_after, 
+                        paired = TRUE)
+
+t_test_paired
+
+# Calculate mean difference
+mean_diff <- mean(treatment_data$hr_before - treatment_data$hr_after)
+cat("\nMean difference (before - after):", round(mean_diff, 2), "bpm")
+```
+
+**Questions:**
+- p-value = **`r format.pval(t_test_paired$p.value, digits = 3)`**
+- Did heart rate significantly change after treatment? **`r ifelse(t_test_paired$p.value < 0.05, "Yes", "No")`, since p `r ifelse(t_test_paired$p.value < 0.05, "< 0.05", "≥ 0.05")` we `r ifelse(t_test_paired$p.value < 0.05, "reject", "fail to reject")` the null hypothesis.**
+
+**Interpretation:** `r ifelse(t_test_paired$p.value < 0.05, paste("Heart rate significantly decreased after treatment by an average of", round(mean_diff, 2), "bpm."), "Heart rate did not significantly change after treatment.")`
+
+---
+
+# Part 4: Chi-Square Test
+
+## Exercise 4.1: Chi-Square Test
+
+Test if smoking status is associated with department.
+
+```{r}
+# Create contingency table
+cont_table <- table(er_data$smoker, er_data$department)
+cont_table
+
+# Add row and column totals for clarity
+addmargins(cont_table)
+
+# Perform chi-square test
+chi_test <- chisq.test(cont_table)
+chi_test
+
+# Check expected counts (should all be ≥ 5)
+chi_test$expected
+```
+
+**Questions:**
+- p-value = **`r format.pval(chi_test$p.value, digits = 3)`**
+- Is there a significant association between smoking and department? **`r ifelse(chi_test$p.value < 0.05, "Yes", "No")`, since p `r ifelse(chi_test$p.value < 0.05, "< 0.05", "≥ 0.05")` we `r ifelse(chi_test$p.value < 0.05, "reject", "fail to reject")` the null hypothesis.**
+
+**Interpretation:** `r ifelse(chi_test$p.value < 0.05, "There is a significant association between smoking status and department - the distribution of smokers differs across departments.", "There is no significant association between smoking status and department - smoking prevalence is similar across departments.")`
+
+**Note:** All expected counts are ≥ 5, so the chi-square test is appropriate.
+
+---
+
+# Reflection Questions (Bonus)
+
+1. **When would you use median instead of mean?**
+
+**Answer:** Use median when:
+- Data is skewed (not symmetric)
+- Data has outliers that would pull the mean away from the center
+- Example: Income data, house prices, or any data with extreme values
+
+The median is more robust to outliers because it only depends on the middle value, not all values.
+
+2. **What should you do if t-test assumptions are violated?**
+
+**Answer:** If t-test assumptions are violated:
+- **Transform the data** (e.g., log transformation) to make it more normal
+- **Use non-parametric tests** instead:
+  - Instead of one-sample t-test → Wilcoxon signed-rank test
+  - Instead of two-sample t-test → Mann-Whitney U test
+  - Instead of paired t-test → Wilcoxon signed-rank test for paired data
+- **Increase sample size** if possible (Central Limit Theorem helps with normality when n > 30)
+
+3. **What's the difference between a one-sample and two-sample t-test?**
+
+**Answer:**
+- **One-sample t-test:** Compares the mean of ONE sample to a known value (e.g., is average BP different from 120 mmHg?)
+- **Two-sample t-test:** Compares the means of TWO independent groups (e.g., do males and females have different BP?)
+- **Paired t-test:** Special case - compares TWO measurements from the SAME subjects (e.g., BP before vs after treatment in the same patients)
+
+---
+
+# Summary of Results
+
+```{r}
+# Create summary table
+results <- data.frame(
+  Test = c("One-sample t-test", "Two-sample t-test", "Paired t-test", "Chi-square test"),
+  Question = c(
+    "Temp > 37.0°C?",
+    "HR differs by gender?",
+    "HR changed after treatment?",
+    "Smoking associated with dept?"
+  ),
+  P_Value = c(
+    round(t_test_temp$p.value, 4),
+    round(t_test_gender$p.value, 4),
+    round(t_test_paired$p.value, 4),
+    round(chi_test$p.value, 4)
+  ),
+  Significant = c(
+    ifelse(t_test_temp$p.value < 0.05, "Yes", "No"),
+    ifelse(t_test_gender$p.value < 0.05, "Yes", "No"),
+    ifelse(t_test_paired$p.value < 0.05, "Yes", "No"),
+    ifelse(chi_test$p.value < 0.05, "Yes", "No")
+  )
+)
+
+knitr::kable(results, caption = "Summary of Hypothesis Tests")
+```
+
+
+
+**Great work!** 🎉

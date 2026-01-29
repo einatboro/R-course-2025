@@ -1,0 +1,1023 @@
+---
+title: "Week 4: Descriptive Statistics & Hypothesis Testing"
+author: "Einat Borohovich"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+    theme: readable
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Welcome!
+
+---
+
+# Part 1: Descriptive Statistics
+
+## Setup: Creating Sample Data
+
+Let's create a dataset of patient blood pressure readings:
+
+```{r}
+# Set a random seed so results are reproducible
+set.seed(42)
+
+# Create a data frame with simulated patient data
+bp_data <- data.frame(
+  # Create patient IDs from 1 to 100
+  patient_id = 1:100,
+  # Generate 100 ages from normal distribution (mean=55, sd=15), rounded to whole numbers
+  age = round(rnorm(100, mean = 55, sd = 15)),
+  # Generate 100 systolic BP values from normal distribution (mean=135, sd=20)
+  systolic_bp = round(rnorm(100, mean = 135, sd = 20)),
+  # Generate 100 diastolic BP values from normal distribution (mean=85, sd=12)
+  diastolic_bp = round(rnorm(100, mean = 85, sd = 12)),
+  # Randomly assign diabetes status: 30% "Yes", 70% "No"
+  diabetes = sample(c("Yes", "No"), 100, replace = TRUE, prob = c(0.3, 0.7)),
+  # Randomly assign department with equal probability
+  department = sample(c("ER", "Cardiology", "Internal"), 100, replace = TRUE)
+)
+
+# Display the first 6 rows of the data frame
+head(bp_data)
+```
+
+---
+
+## Mean (Average)
+
+The **mean** is the sum of all values divided by the count.
+
+**Formula:** $\bar{x} = \frac{\sum x_i}{n}$
+
+```{r}
+# Calculate the mean (average) of systolic BP
+mean_systolic <- mean(bp_data$systolic_bp)
+
+# Print the result
+mean_systolic
+
+# If you had missing values (NA), you would use:
+# mean(bp_data$systolic_bp, na.rm = TRUE)
+# The na.rm = TRUE argument removes NAs before calculating
+```
+
+**Clinical interpretation:** The average systolic BP in our sample is `r round(mean_systolic, 1)` mmHg.
+
+### Calculating Mean by Hand
+
+Let's verify by calculating manually:
+
+```{r}
+# Sum all values
+total <- sum(bp_data$systolic_bp)
+
+# Count number of values
+n <- length(bp_data$systolic_bp)
+
+# Divide sum by count
+manual_mean <- total / n
+
+# Compare with mean() function
+cat("mean() function:", mean_systolic, "\n")
+cat("Manual calculation:", manual_mean, "\n")
+cat("Same result?", mean_systolic == manual_mean)
+```
+
+---
+
+## Median (Middle Value)
+
+The **median** is the middle value when data is sorted from smallest to largest.
+
+**For odd n:** middle value  
+**For even n:** average of two middle values
+
+```{r}
+# Calculate the median (middle value) of systolic BP
+median_systolic <- median(bp_data$systolic_bp)
+
+# Print the result
+median_systolic
+```
+
+### Understanding Median vs Mean
+
+```{r}
+# Compare mean vs median
+cat("Mean:", round(mean_systolic, 2), "\n")
+cat("Median:", round(median_systolic, 2), "\n")
+cat("Difference:", round(mean_systolic - median_systolic, 2), "\n")
+```
+
+**When to use which:**
+
+- **Mean:** Use when data is symmetric and has no outliers
+- **Median:** Use when data is skewed or has outliers
+
+### Example: Effect of Outliers
+
+```{r}
+# Create a small dataset to show outlier effect
+small_data <- c(120, 125, 130, 135, 140)  # Symmetric data
+
+# Add an outlier
+data_with_outlier <- c(120, 125, 130, 135, 200)  # One very high value
+
+# Compare mean and median
+cat("Without outlier:\n")
+cat("  Mean:", mean(small_data), "\n")
+cat("  Median:", median(small_data), "\n\n")
+
+cat("With outlier (200):\n")
+cat("  Mean:", mean(data_with_outlier), "\n")
+cat("  Median:", median(data_with_outlier), "\n")
+
+# The mean jumped from 130 to 142, but median stayed at 130!
+```
+
+---
+
+## Mode (Most Common Value)
+
+The **mode** is the value that appears most frequently.
+
+R doesn't have a built-in mode function, so we calculate it using `table()`:
+
+```{r}
+# Create a frequency table of ages (counts how many times each age appears)
+age_table <- table(bp_data$age)
+
+# Print the frequency table
+head(age_table, 10)  # Show first 10 ages
+
+# Find which age appears most frequently
+# which.max() returns the position of the maximum value
+# names() extracts the age value at that position
+# as.numeric() converts it from text to number
+mode_age <- as.numeric(names(age_table)[which.max(age_table)])
+
+# Print the mode
+cat("Most common age:", mode_age, "years old\n")
+
+# How many patients have this age?
+cat("Number of patients with age", mode_age, ":", max(age_table), "\n")
+```
+
+### Mode for Categorical Variables
+
+Mode is especially useful for categorical data:
+
+```{r}
+# Frequency table for diabetes status
+table(bp_data$diabetes)
+
+# Frequency table for department
+table(bp_data$department)
+
+# The mode for department is the one with highest count
+dept_table <- table(bp_data$department)
+mode_dept <- names(dept_table)[which.max(dept_table)]
+cat("\nMost common department:", mode_dept)
+```
+
+---
+
+## Variance
+
+**Variance** measures how spread out the data is from the mean.
+
+**Formula:** $s^2 = \frac{\sum (x_i - \bar{x})^2}{n-1}$
+
+```{r}
+# Calculate variance using the var() function
+variance_systolic <- var(bp_data$systolic_bp)
+
+# Print the variance
+variance_systolic
+```
+
+**Problem with variance:** The units are squared (mmHg²), which is hard to interpret!
+
+### Calculating Variance Manually
+
+Let's see how variance is calculated step by step:
+
+```{r}
+# Step 1: Calculate the mean
+mean_val <- mean(bp_data$systolic_bp)
+
+# Step 2: Calculate deviation from mean for each value
+deviations <- bp_data$systolic_bp - mean_val
+
+# Step 3: Square each deviation
+squared_deviations <- deviations^2
+
+# Step 4: Sum all squared deviations
+sum_squared_dev <- sum(squared_deviations)
+
+# Step 5: Divide by (n-1)
+n <- length(bp_data$systolic_bp)
+manual_variance <- sum_squared_dev / (n - 1)
+
+# Compare with var() function
+cat("var() function:", variance_systolic, "\n")
+cat("Manual calculation:", manual_variance, "\n")
+cat("Same result?", round(variance_systolic, 10) == round(manual_variance, 10))
+```
+
+**Note:** We divide by (n-1) instead of n. This is called "Bessel's correction" and gives us an unbiased estimate of population variance.
+
+---
+
+## Standard Deviation
+
+**Standard deviation (SD)** is the square root of variance. It has the same units as the original data.
+
+**Formula:** $s = \sqrt{s^2}$
+
+```{r}
+# Calculate standard deviation using the sd() function
+sd_systolic <- sd(bp_data$systolic_bp)
+
+# Print the SD
+sd_systolic
+
+# Verify: SD is the square root of variance
+cat("\nsd() function:", sd_systolic, "\n")
+cat("sqrt(variance):", sqrt(variance_systolic), "\n")
+cat("Same result?", sd_systolic == sqrt(variance_systolic))
+```
+
+**Clinical interpretation:** Systolic BP is `r round(mean_systolic, 1)` ± `r round(sd_systolic, 1)` mmHg.
+
+### What Does Standard Deviation Tell Us?
+
+For normally distributed data:
+
+- About **68%** of values are within 1 SD of the mean
+- About **95%** of values are within 2 SD of the mean
+- About **99.7%** of values are within 3 SD of the mean
+
+```{r}
+# Calculate the ranges
+one_sd_lower <- mean_systolic - sd_systolic
+one_sd_upper <- mean_systolic + sd_systolic
+
+cat("Mean ± 1 SD range:", round(one_sd_lower, 1), "to", round(one_sd_upper, 1), "mmHg\n")
+
+# Count how many values fall within this range
+within_one_sd <- sum(bp_data$systolic_bp >= one_sd_lower & 
+                     bp_data$systolic_bp <= one_sd_upper)
+
+# Calculate percentage
+percentage <- (within_one_sd / length(bp_data$systolic_bp)) * 100
+
+cat("Percentage within 1 SD:", round(percentage, 1), "%\n")
+```
+
+---
+
+## All Statistics Together: summary()
+
+The `summary()` function gives you multiple statistics at once:
+
+```{r}
+# Summary statistics for systolic BP
+summary(bp_data$systolic_bp)
+
+# Summary for entire dataset
+summary(bp_data)
+```
+
+The summary shows:
+- **Min:** Minimum value
+- **1st Qu:** 25th percentile (first quartile)
+- **Median:** Middle value
+- **Mean:** Average
+- **3rd Qu:** 75th percentile (third quartile)
+- **Max:** Maximum value
+
+---
+
+## Visualizing Descriptive Statistics
+
+### Histogram with Mean and Median
+
+A histogram shows the distribution of data and helps us see:
+
+- The shape of the distribution (symmetric, skewed, etc.)
+- Where most values cluster
+- How mean and median compare
+
+```{r}
+# Load the ggplot2 library for plotting
+library(ggplot2)
+if (!requireNamespace("rlang", quietly = TRUE)) {
+  install.packages("rlang")
+}
+
+# Create a histogram showing the distribution
+ggplot(bp_data, aes(x = systolic_bp)) +  # Set x-axis to systolic_bp
+  # geom_histogram creates bars showing frequency of values
+  # bins = 20 means divide data into 20 bins
+  geom_histogram(bins = 20, fill = "steelblue", alpha = 0.7, color = "white") +
+  # Add a vertical dashed red line at the mean
+  geom_vline(xintercept = mean_systolic, color = "red", 
+             linetype = "dashed", size = 1.2) +
+  # Add a vertical solid green line at the median
+  geom_vline(xintercept = median_systolic, color = "darkgreen", 
+             linetype = "solid", size = 1.2) +
+  # Add text label for the mean
+  annotate("text", x = mean_systolic + 15, y = 15, 
+           label = paste("Mean =", round(mean_systolic, 1)), 
+           color = "red", size = 4, fontface = "bold") +
+  # Add text label for the median
+  annotate("text", x = median_systolic - 15, y = 13, 
+           label = paste("Median =", round(median_systolic, 1)), 
+           color = "darkgreen", size = 4, fontface = "bold") +
+  # Set axis labels and title
+  labs(title = "Distribution of Systolic Blood Pressure",
+       subtitle = paste("SD =", round(sd_systolic, 1), "mmHg"),
+       x = "Systolic BP (mmHg)", 
+       y = "Number of Patients") +
+  # Use a clean theme
+  theme_minimal()
+```
+
+**What this shows:** The red dashed line (mean) and green solid line (median) are close together, indicating the data is fairly symmetric without major outliers.
+
+### Histogram Showing Variance/SD
+
+Visualizing what standard deviation means:
+
+```{r}
+# Create histogram with shaded regions showing ±1 SD from mean
+ggplot(bp_data, aes(x = systolic_bp)) +
+  # Add shaded rectangle showing mean ± 1 SD range
+  # This captures approximately 68% of the data
+  annotate("rect", 
+           xmin = mean_systolic - sd_systolic, 
+           xmax = mean_systolic + sd_systolic,
+           ymin = 0, ymax = Inf, 
+           alpha = 0.2, fill = "yellow") +
+  # Create the histogram
+  geom_histogram(bins = 20, fill = "steelblue", alpha = 0.7, color = "white") +
+  # Add vertical line at the mean
+  geom_vline(xintercept = mean_systolic, color = "red", 
+             linetype = "dashed", size = 1.2) +
+  # Add labels showing the SD range
+  annotate("text", x = mean_systolic, y = 18,
+           label = paste("Mean ± 1 SD\n[", 
+                        round(mean_systolic - sd_systolic, 1), "-",
+                        round(mean_systolic + sd_systolic, 1), "]"),
+           color = "red", size = 3.5, fontface = "bold") +
+  # Set labels
+  labs(title = "Standard Deviation: Spread Around the Mean",
+       subtitle = "Yellow region = Mean ± 1 SD (contains ~68% of data)",
+       x = "Systolic BP (mmHg)", 
+       y = "Number of Patients") +
+  theme_minimal()
+```
+
+**What this shows:** The yellow shaded area represents the range of Mean ± 1 SD. About 68% of patients fall within this range.
+
+### Boxplot
+
+A boxplot provides a different view of the data distribution:
+
+```{r}
+# Calculate quartile values first
+q1_val <- quantile(bp_data$systolic_bp, 0.25)
+q3_val <- quantile(bp_data$systolic_bp, 0.75)
+
+# Create the boxplot
+ggplot(bp_data, aes(x = "", y = systolic_bp)) +
+  geom_boxplot(fill = "lightblue", alpha = 0.7, width = 0.5) +
+  
+  # Add horizontal lines for mean and median
+  geom_hline(yintercept = mean_systolic, color = "red", 
+             linetype = "dashed", linewidth = 1) +
+  geom_hline(yintercept = median_systolic, color = "darkgreen", 
+             linetype = "solid", linewidth = 1) +
+  
+  # Add labels for Q1 and Q3
+  annotate("text", x = 1.35, y = q3_val, 
+           label = paste("Q3 (75%) =", round(q3_val, 1)), 
+           color = "black", size = 4, hjust = 0) +
+  annotate("text", x = 1.35, y = q1_val, 
+           label = paste("Q1 (25%) =", round(q1_val, 1)), 
+           color = "black", size = 4, hjust = 0) +
+  
+  # Add labels for mean and median with vertical adjustment (vjust) to avoid smudging
+  annotate("text", x = 1.35, y = mean_systolic, 
+           label = paste("Mean =", round(mean_systolic, 1)), 
+           color = "red", fontface = "bold", size = 4, hjust = 0, vjust = -0.7) +
+  annotate("text", x = 1.35, y = median_systolic, 
+           label = paste("Median =", round(median_systolic, 1)), 
+           color = "darkgreen", fontface = "bold", size = 4, hjust = 0, vjust = 1.7) +
+  
+  # Set titles and labels
+  labs(title = "Boxplot of Systolic Blood Pressure",
+       subtitle = "Displaying Mean, Median, and Quartiles (Q1/Q3)",
+       y = "Systolic BP (mmHg)",
+       x = "") +
+  
+  # Theme and layout adjustments
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        plot.margin = margin(5, 100, 5, 5)) + # Extra right margin for labels
+  coord_cartesian(clip = "off") # Prevent labels from being cut off
+```
+
+**Reading the boxplot:**
+
+- **Bottom of box:** 25th percentile (Q1)
+- **Line in box:** Median (50th percentile)
+- **Top of box:** 75th percentile (Q3)
+- **Whiskers:** Extend to min/max values
+- **Dots (if any):** Potential outliers
+
+---
+
+---
+
+# Part 2: Hypothesis Testing (45 minutes)
+
+## What is Hypothesis Testing?
+
+**Goal:** Determine if observed differences are real or just due to chance.
+
+**Basic process:**
+
+1. **State hypotheses:**
+   - **Null hypothesis (H₀):** No difference exists
+   - **Alternative hypothesis (H₁):** A difference exists
+
+2. **Choose significance level:** Usually α = 0.05 (5%)
+
+3. **Calculate test statistic** from your data
+
+4. **Calculate p-value:** Probability of seeing your result if H₀ is true
+
+5. **Make decision:**
+   - If **p < 0.05**: Reject H₀ (result is statistically significant)
+   - If **p ≥ 0.05**: Fail to reject H₀ (result is not statistically significant)
+
+---
+
+## T-Test Assumptions
+
+**IMPORTANT:** Check these assumptions BEFORE running t-tests!
+
+### 1. Data is Continuous
+
+T-tests work on continuous numerical data (like blood pressure, weight, height), not categorical data (like gender, yes/no responses).
+
+```{r}
+# Check data type
+class(bp_data$systolic_bp)  # Should be "numeric" or "integer"
+
+# Look at the data
+summary(bp_data$systolic_bp)  # Should show numeric values
+```
+
+### 2. Data is Approximately Normal
+
+The data should follow a normal (bell-shaped) distribution, OR your sample size should be > 30.
+
+```{r}
+# Visual check: Histogram
+# A normal distribution looks roughly bell-shaped and symmetric
+ggplot(bp_data, aes(x = systolic_bp)) +
+  geom_histogram(bins = 20, fill = "steelblue", alpha = 0.7, color = "white") +
+  labs(title = "Check for Normality: Histogram",
+       subtitle = "Should be roughly bell-shaped",
+       x = "Systolic BP (mmHg)", y = "Count") +
+  theme_minimal()
+
+# Visual check: Q-Q plot
+# Points should fall roughly along the diagonal line
+ggplot(bp_data, aes(sample = systolic_bp)) +
+  # stat_qq creates quantile-quantile plot
+  stat_qq(color = "steelblue", size = 2) +
+  # stat_qq_line adds the reference line
+  stat_qq_line(color = "red", linetype = "dashed", size = 1) +
+  labs(title = "Check for Normality: Q-Q Plot",
+       subtitle = "Points should fall along the red line",
+       x = "Theoretical Quantiles", y = "Sample Quantiles") +
+  theme_minimal()
+
+# Statistical test: Shapiro-Wilk test
+# H0: Data is normally distributed
+# If p > 0.05, data is approximately normal
+shapiro.test(bp_data$systolic_bp)
+
+# Note: With large samples (n > 30), small deviations from normality are okay
+# The Central Limit Theorem helps us here!
+cat("Sample size:", nrow(bp_data), "\n")
+cat("If n > 30, t-test is robust to violations of normality")
+```
+
+### 3. Independence of Observations
+
+Each observation should be independent - one measurement shouldn't influence another.
+
+**Good examples (independent):**
+- Blood pressure from different patients
+- Test scores from different students
+
+**Bad examples (NOT independent):**
+- Multiple measurements from the same patient (use paired t-test instead!)
+- Students in the same class who studied together
+
+```{r}
+# Check: Look at how data was collected
+# Are these different patients? YES - they have unique patient IDs
+length(unique(bp_data$patient_id))  # Should equal number of rows for independence
+nrow(bp_data)
+
+# If these numbers are equal, observations are independent
+```
+
+### 4. For Two-Sample T-Test: Similar Variances
+
+When comparing two groups, their variances should be roughly similar (homogeneity of variance).
+
+```{r}
+
+library(dplyr)
+# Calculate variance for each group
+bp_data %>%
+  # Split by diabetes status
+  group_by(diabetes) %>%
+  # Calculate variance for each group
+  summarize(
+    variance = var(systolic_bp),
+    sd = sd(systolic_bp)
+  )
+
+# Rule of thumb: Largest variance should be < 4 times the smallest variance
+
+# Formal test: Levene's test (from car package)
+# Install if needed: install.packages("car")
+library(car)
+
+# H0: Variances are equal
+# If p > 0.05, variances are similar enough
+leveneTest(systolic_bp ~ diabetes, data = bp_data)
+
+# If variances are unequal, use: t.test(..., var.equal = FALSE)
+```
+
+### What If Assumptions Are Violated?
+
+If assumptions are not met, consider:
+
+1. **Transform your data** (e.g., log transformation)
+2. **Use non-parametric tests:**
+   - Instead of one-sample t-test → Wilcoxon signed-rank test
+   - Instead of two-sample t-test → Mann-Whitney U test (Wilcoxon rank-sum)
+   - Instead of paired t-test → Wilcoxon signed-rank test for paired data
+
+```{r}
+# Example: Non-parametric alternative to two-sample t-test
+# wilcox.test() doesn't assume normality
+wilcox.test(systolic_bp ~ diabetes, data = bp_data)
+```
+
+**Summary of when to use t-tests:**
+- ✅ Continuous data
+- ✅ Approximately normal distribution OR n > 30
+- ✅ Independent observations
+- ✅ (For two-sample) Similar variances
+
+---
+
+## T-Tests: Comparing Means
+
+T-tests are used when comparing means (averages).
+
+### One-Sample T-Test
+
+**Question:** Is our sample mean **higher than** a known value?
+
+**Example:** Is the average systolic BP in our sample **higher than** normal (120 mmHg)?
+
+```{r}
+# H0: population mean ≤ 120 mmHg (not higher)
+# H1: population mean > 120 mmHg (is higher)
+
+# t.test() performs the one-sample t-test
+# mu = 120 specifies the value we're testing against
+# alternative = "greater" makes this a one-sided test
+t_test_result <- t.test(bp_data$systolic_bp, 
+                        mu = 120, 
+                        alternative = "greater")
+
+# Print the complete test results
+t_test_result
+```
+
+**Understanding the output:**
+
+- **t statistic:** `r round(t_test_result$statistic, 2)` - measures how many standard errors the sample mean is from 120
+- **df (degrees of freedom):** `r t_test_result$parameter` - sample size minus 1
+- **p-value:** `r format.pval(t_test_result$p.value, digits = 4)` - probability of this result if H₀ is true
+- **95% confidence interval:** Lower bound = `r round(t_test_result$conf.int[1], 2)`. We're 95% confident the true mean is above this value.
+- **sample mean:** `r round(t_test_result$estimate, 2)` mmHg
+
+**Conclusion:** Since p-value is `r ifelse(t_test_result$p.value < 0.05, "< 0.05", "≥ 0.05")`, we `r ifelse(t_test_result$p.value < 0.05, "reject", "fail to reject")` the null hypothesis. The average BP in our sample `r ifelse(t_test_result$p.value < 0.05, "is significantly higher than", "is not significantly higher than")` 120 mmHg.
+
+**Note on one-sided vs two-sided tests:**
+- **One-sided (what we used):** Tests if mean is specifically HIGHER (or LOWER)
+  - Use `alternative = "greater"` to test if mean > reference value
+  - Use `alternative = "less"` to test if mean < reference value
+- **Two-sided (default):** Tests if mean is DIFFERENT in either direction
+  - Use `alternative = "two.sided"` or omit the argument
+
+```{r}
+# Example: Two-sided test (testing if different, not specifically higher)
+t.test(bp_data$systolic_bp, mu = 120)  # Tests if mean ≠ 120
+```
+
+**Conclusion:** Since p-value `r ifelse(t_test_result$p.value < 0.05, "< 0.05", "≥ 0.05")`, we `r ifelse(t_test_result$p.value < 0.05, "reject", "fail to reject")` the null hypothesis. The average BP in our sample `r ifelse(t_test_result$p.value < 0.05, "is significantly different from", "is not significantly different from")` 120 mmHg.
+
+```{r}
+# Extract specific components
+# Extract just the p-value
+t_test_result$p.value
+
+# Extract the 95% confidence interval
+t_test_result$conf.int
+
+# Extract the sample mean
+t_test_result$estimate
+```
+
+---
+
+### Two-Sample T-Test (Independent Groups)
+
+**Question:** Do two independent groups have different means?
+
+**Example:** Do diabetic patients have different systolic BP than non-diabetic patients?
+
+```{r}
+# H0: mean_diabetic = mean_non_diabetic
+# H1: mean_diabetic ≠ mean_non_diabetic
+
+# The formula syntax "outcome ~ group" compares outcome across groups
+# data = bp_data tells R which dataset to use
+t_test_diabetes <- t.test(systolic_bp ~ diabetes, data = bp_data)
+
+# Print the results
+t_test_diabetes
+```
+
+**Understanding the output:**
+
+- **t statistic:** `r round(t_test_diabetes$statistic, 2)`
+- **df:** `r round(t_test_diabetes$parameter, 2)`
+- **p-value:** `r format.pval(t_test_diabetes$p.value, digits = 4)`
+- **95% CI for difference:** [`r round(t_test_diabetes$conf.int[1], 2)`, `r round(t_test_diabetes$conf.int[2], 2)`]
+- **Group means:** 
+  - No: `r round(t_test_diabetes$estimate[1], 2)` mmHg
+  - Yes: `r round(t_test_diabetes$estimate[2], 2)` mmHg
+
+**Conclusion:** `r ifelse(t_test_diabetes$p.value < 0.05, "There is a statistically significant difference", "There is no statistically significant difference")` in systolic BP between diabetic and non-diabetic patients (p = `r round(t_test_diabetes$p.value, 4)`).
+
+### Calculate Group Statistics Manually
+
+```{r}
+# Load dplyr for data manipulation
+library(dplyr)
+
+# Calculate summary statistics by diabetes group
+group_summary <- bp_data %>%
+  # Split data by diabetes status
+  group_by(diabetes) %>%
+  # Calculate mean, SD, and count for each group
+  summarize(
+    n = n(),                        # Count number in each group
+    mean_bp = mean(systolic_bp),    # Mean BP for each group
+    sd_bp = sd(systolic_bp)         # SD for each group
+  )
+
+# Print the summary table
+print(group_summary)
+```
+
+### Visualize the Comparison
+
+```{r}
+# Create a boxplot comparing the two groups
+ggplot(bp_data, aes(x = diabetes, y = systolic_bp, fill = diabetes)) +
+  # Create boxplots
+  geom_boxplot(alpha = 0.7, width = 0.5) +
+  # Add individual data points with some horizontal jitter to avoid overlap
+  geom_jitter(width = 0.15, alpha = 0.4, size = 2) +
+  # Add red diamonds showing the mean for each group
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 4, 
+               fill = "red", color = "darkred") +
+  # Add labels with p-value in subtitle
+  labs(title = "Systolic BP: Diabetic vs Non-Diabetic Patients",
+       subtitle = paste("Two-sample t-test: p =", 
+                       round(t_test_diabetes$p.value, 4)),
+       x = "Diabetes Status", 
+       y = "Systolic BP (mmHg)") +
+  # Use a clean theme
+  theme_minimal() +
+  # Change legend title and remove legend (since x-axis labels are clear)
+  theme(legend.position = "none") +
+  # Use custom colors
+  scale_fill_manual(values = c("lightblue", "lightcoral"))
+```
+
+---
+
+### Paired T-Test
+
+**Question:** Did the same subjects change over time or between conditions?
+
+**Key difference:** Each subject serves as their own control (measurements are paired).
+
+**Example:** Did blood pressure change in the same patients before vs after treatment?
+
+```{r}
+# Create paired data (same patients measured twice)
+set.seed(123)  # Set seed for reproducibility
+treatment_data <- data.frame(
+  # Patient IDs 1 to 50
+  patient_id = 1:50,
+  # BP before treatment: mean 145, sd 15
+  bp_before = round(rnorm(50, mean = 145, sd = 15)),
+  # BP after treatment: mean 138, sd 15 (on average, 7 mmHg lower)
+  bp_after = round(rnorm(50, mean = 138, sd = 15))
+)
+
+# Look at first few patients
+head(treatment_data)
+
+# H0: mean difference = 0 (no change in BP)
+# H1: mean difference ≠ 0 (BP changed)
+
+# paired = TRUE tells R these are matched measurements from same patients
+t_test_paired <- t.test(treatment_data$bp_before, 
+                        treatment_data$bp_after, 
+                        paired = TRUE)
+
+# Print results
+t_test_paired
+```
+
+**Understanding paired t-test output:**
+
+- **t statistic:** `r round(t_test_paired$statistic, 2)`
+- **df:** `r t_test_paired$parameter` (n - 1, where n = number of pairs)
+- **p-value:** `r format.pval(t_test_paired$p.value, digits = 4)`
+- **mean difference:** `r round(t_test_paired$estimate, 2)` mmHg (before minus after)
+- **95% CI for difference:** [`r round(t_test_paired$conf.int[1], 2)`, `r round(t_test_paired$conf.int[2], 2)`]
+
+**Conclusion:** `r ifelse(t_test_paired$p.value < 0.05, "Blood pressure significantly changed", "Blood pressure did not significantly change")` after treatment (p = `r round(t_test_paired$p.value, 4)`).
+
+### Visualize Paired Data
+
+```{r}
+# Calculate change for each patient (after minus before)
+# Negative values = BP decreased (improvement)
+treatment_data$change <- treatment_data$bp_after - treatment_data$bp_before
+
+# Create histogram of changes
+ggplot(treatment_data, aes(x = change)) +
+  # Histogram of BP changes
+  geom_histogram(bins = 15, fill = "coral", alpha = 0.7, color = "white") +
+  # Dashed red line at zero (no change)
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", size = 1.2) +
+  # Solid blue line at mean change
+  geom_vline(xintercept = mean(treatment_data$change), 
+             linetype = "solid", color = "darkblue", size = 1.2) +
+  # Add label for mean change
+  annotate("text", x = mean(treatment_data$change) + 5, y = 10,
+           label = paste("Mean change =", round(mean(treatment_data$change), 1), "mmHg"),
+           color = "darkblue", fontface = "bold", size = 4) +
+  # Add title with p-value
+  labs(title = "Change in BP After Treatment",
+       subtitle = paste("Paired t-test: p =", round(t_test_paired$p.value, 4)),
+       x = "BP Change (mmHg)\nNegative = Improvement", 
+       y = "Number of Patients") +
+  theme_minimal()
+```
+
+---
+
+
+---
+
+## Chi-Square Test: Categorical Variables
+
+**When to use:** Testing association between two categorical variables.
+
+**Question:** Are two categorical variables independent, or is there a relationship?
+
+**Example:** Is diabetes prevalence different across departments?
+
+### Create a Contingency Table
+
+```{r}
+# Create a contingency table (cross-tabulation)
+# Rows = diabetes status, Columns = department
+diabetes_dept_table <- table(bp_data$diabetes, bp_data$department)
+
+# Print the table showing counts in each combination
+diabetes_dept_table
+
+# Add row and column totals for clarity
+addmargins(diabetes_dept_table)
+```
+
+### Calculate Proportions
+
+```{r}
+# Calculate proportions by column (margin = 2 means by column)
+# This shows what percentage of each department has diabetes
+prop.table(diabetes_dept_table, margin = 2)
+
+# Multiply by 100 to get percentages
+round(prop.table(diabetes_dept_table, margin = 2) * 100, 1)
+```
+
+### Perform Chi-Square Test
+
+```{r}
+# H0: Diabetes and department are independent (no association)
+# H1: Diabetes and department are related (there is an association)
+
+# chisq.test() performs chi-square test of independence
+chi_test <- chisq.test(diabetes_dept_table)
+
+# Print the test results
+chi_test
+```
+
+**Understanding the output:**
+
+- **χ² (chi-square) statistic:** `r round(chi_test$statistic, 3)` - measures how far observed counts are from expected counts if variables were independent
+- **df (degrees of freedom):** `r chi_test$parameter` - calculated as (rows - 1) × (columns - 1) = (2-1) × (3-1) = 2
+- **p-value:** `r format.pval(chi_test$p.value, digits = 4)` - probability of seeing this pattern if variables are truly independent
+
+**Conclusion:** `r ifelse(chi_test$p.value < 0.05, "There is a statistically significant association", "There is no statistically significant association")` between diabetes status and department (p = `r round(chi_test$p.value, 4)`).
+
+### Expected Counts
+
+Chi-square test assumes that expected counts in each cell are ≥ 5:
+
+```{r warning=TRUE}
+# Look at expected counts under the null hypothesis
+chi_test$expected
+
+# All cells have counts ≥ 5, so chi-square test is valid
+
+# Create a small contingency table that will trigger chi-square warning
+small_table <- table(bp_data$diabetes[1:20], bp_data$department[1:20])
+
+# Display the table
+small_table
+
+# Perform chi-square test (will show warning)
+chi_test <- chisq.test(small_table)
+chi_test
+
+# Show expected counts (some will be < 5)
+cat("\nExpected counts:\n")
+chi_test$expected
+
+# When expected counts < 5, use Fisher's exact test instead
+cat("\n--- Using Fisher's Exact Test (appropriate for small samples) ---\n")
+fisher_test <- fisher.test(small_table)
+fisher_test
+```
+
+### Visualize the Association
+
+```{r}
+# Convert contingency table to data frame for ggplot
+diabetes_dept_df <- as.data.frame(diabetes_dept_table)
+
+# Give the columns meaningful names
+names(diabetes_dept_df) <- c("Diabetes", "Department", "Count")
+
+# Create a grouped bar chart
+ggplot(diabetes_dept_df, aes(x = Department, y = Count, fill = Diabetes)) +
+  # position = "dodge" puts bars side-by-side instead of stacked
+  geom_bar(stat = "identity", position = "dodge", alpha = 0.8) +
+  # Add counts as labels on top of bars
+  geom_text(aes(label = Count), 
+            position = position_dodge(width = 0.9),
+            vjust = -0.5, size = 3.5) +
+  # Add chi-square test result to subtitle
+  labs(title = "Diabetes Prevalence by Department",
+       subtitle = paste("Chi-square test: χ² =", round(chi_test$statistic, 2),
+                       ", p =", round(chi_test$p.value, 4)),
+       y = "Number of Patients") +
+  # Use custom colors
+  scale_fill_manual(values = c("lightblue", "lightcoral")) +
+  theme_minimal() +
+  # Move legend to top
+  theme(legend.position = "top")
+
+
+
+## ANOVA: Comparing More Than Two Groups
+# Question: Does systolic BP differ across all three departments?
+
+# 1. Run the ANOVA model
+# H0: mean_Cardiology = mean_ER = mean_Internal
+anova_model <- aov(systolic_bp ~ department, data = bp_data)
+
+# 2. View the results
+summary(anova_model)
+
+# 3. Post-hoc analysis (Run this if p-value < 0.05)
+# It tells us which specific departments are different
+TukeyHSD(anova_model)
+
+library(ggplot2)
+
+ggplot(bp_data, aes(x = department, y = systolic_bp, fill = department)) +
+  geom_boxplot(alpha = 0.7) +
+  # Add individual points to show distribution
+  geom_jitter(width = 0.1, alpha = 0.3) +
+  # Add a red diamond for the mean of each group
+  stat_summary(fun = mean, geom = "point", shape = 23, size = 3, fill = "red") +
+  labs(title = "Systolic BP by Department",
+       subtitle = "ANOVA p = 0.073 (Not Significant)",
+       x = "Hospital Department",
+       y = "Systolic BP (mmHg)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+---
+
+## Summary: Choosing the Right Test
+
+### T-Tests (for comparing means)
+
+| Test Type | When to Use | R Code |
+|-----------|-------------|--------|
+| **One-sample** | Compare sample mean to known value | `t.test(x, mu = value)` |
+| **Two-sample** | Compare means of two independent groups | `t.test(outcome ~ group, data)` |
+| **Paired** | Compare means of same subjects at two times | `t.test(before, after, paired = TRUE)` |
+
+### Chi-Square Test (for categorical variables)
+
+| Test Type | When to Use | R Code |
+|-----------|-------------|--------|
+| **Chi-square** | Test association between two categorical variables | `chisq.test(table(var1, var2))` |
+
+---
+
+## Key Takeaways
+
+**Descriptive Statistics:**
+
+✓ **Mean:** Average, sensitive to outliers  
+✓ **Median:** Middle value, robust to outliers  
+✓ **Mode:** Most common value  
+✓ **Variance:** Average squared deviation from mean (σ²)  
+✓ **Standard Deviation:** Square root of variance (σ), same units as data  
+
+**Hypothesis Testing:**
+
+✓ **P-value < 0.05** means result is statistically significant  
+✓ **One-sample t-test:** Compare mean to known value  
+✓ **Two-sample t-test:** Compare means of two independent groups  
+✓ **Paired t-test:** Compare same subjects at two time points  
+✓ **Chi-square test:** Test association between categorical variables  
+
+**Best Practices:**
+
+✓ Always visualize your data before testing  
+✓ Check assumptions (normality for t-tests, expected counts ≥5 for chi-square)  
+✓ Report both the test statistic and p-value  
+✓ Statistical significance ≠ clinical importance  
+
+---
+
+
+```
+
+---
+
+
+Remember: Statistics help us make decisions, but understanding what the numbers mean is more important than memorizing formulas!
+
+Good luck with your analyses! 🎉

@@ -1,0 +1,338 @@
+---
+title: "Week 4 Homework: Descriptive Statistics & Hypothesis Testing"
+author: "Einat Borohovich"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: readable
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Instructions
+
+Complete the following exercises using the skills learned in Week 4. 
+
+**Topics covered:**
+- Descriptive statistics: mean, median, mode, variance, standard deviation
+- Hypothesis testing: t-tests (one-sample, two-sample, paired) and chi-square tests
+- Checking t-test assumptions
+
+**How to complete:**
+1. Fill in the code where you see comments starting with `# YOUR CODE HERE:`
+2. Run each code chunk to check your work
+3. Knit the document to HTML when finished
+
+---
+
+# Dataset: Emergency Room Patient Data
+
+We'll use a dataset of patients admitted to the emergency room.
+
+```{r}
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+
+# Load the data
+set.seed(123)
+er_data <- data.frame(
+  patient_id = 1:80,
+  age = round(rnorm(80, mean = 45, sd = 15)),
+  heart_rate = round(rnorm(80, mean = 85, sd = 15)),
+  temperature = round(rnorm(80, mean = 37.5, sd = 1.2), 1),
+  gender = sample(c("Male", "Female"), 80, replace = TRUE),
+  smoker = sample(c("Yes", "No"), 80, replace = TRUE, prob = c(0.25, 0.75)),
+  department = sample(c("Cardiology", "General"), 80, replace = TRUE)
+)
+
+# View first few rows
+head(er_data)
+```
+
+---
+
+# Part 1: Descriptive Statistics 
+
+## Exercise 1.1: Calculate Mean 
+
+Calculate the mean heart rate for all patients.
+
+```{r}
+# YOUR CODE HERE: Calculate mean heart rate
+
+
+```
+
+**Question:** What is the average heart rate? _____________
+
+---
+
+## Exercise 1.2: Calculate Median 
+
+Calculate the median temperature for all patients.
+
+```{r}
+# YOUR CODE HERE: Calculate median temperature
+
+
+```
+
+**Question:** What is the median temperature? _____________
+
+---
+
+## Exercise 1.3: Find the Mode
+
+Find the most common gender in the dataset.
+
+```{r}
+# YOUR CODE HERE: Create a frequency table for gender
+
+
+# YOUR CODE HERE: Identify which gender appears most often
+
+
+```
+
+**Question:** What is the most common gender? _____________
+
+---
+
+## Exercise 1.4: Calculate Variance and Standard Deviation
+
+Calculate the variance and standard deviation of age.
+
+```{r}
+# YOUR CODE HERE: Calculate variance of age
+
+
+# YOUR CODE HERE: Calculate standard deviation of age
+
+
+# YOUR CODE HERE: Verify that SD = sqrt(variance)
+
+
+```
+
+**Questions:**
+- Variance = _____________
+- Standard Deviation = _____________
+- Are they related as expected (SD = √variance)? _____________
+
+---
+
+## Exercise 1.5: Visualize with Histogram
+
+Create a histogram of heart rate showing the mean and median as vertical lines.
+
+```{r}
+# YOUR CODE HERE: Calculate mean and median heart rate first
+
+
+
+# YOUR CODE HERE: Create histogram with ggplot2
+# Include:
+# - geom_histogram() with bins = 15
+# - geom_vline() for mean (red, dashed)
+# - geom_vline() for median (green, solid)
+# - Appropriate labels
+
+
+
+
+```
+
+---
+
+## Exercise 1.6: Create a Boxplot
+
+Create a boxplot comparing heart rate by gender.
+
+```{r}
+# YOUR CODE HERE: Create boxplot
+# x-axis = gender, y-axis = heart_rate
+
+
+
+
+```
+
+---
+
+# Part 2: Checking T-Test Assumptions
+
+Before running t-tests on heart rate data, check the assumptions.
+
+## Exercise 2.1: Check if Data is Continuous
+
+```{r}
+# YOUR CODE HERE: Check the data type of heart_rate
+
+
+# YOUR CODE HERE: Look at summary statistics
+
+
+```
+
+**Question:** Is heart_rate continuous? _____________
+
+---
+
+## Exercise 2.2: Check Normality 
+
+Create a histogram and Q-Q plot to check if heart rate is approximately normal.
+
+```{r}
+# YOUR CODE HERE: Create histogram of heart_rate
+
+
+
+
+# YOUR CODE HERE: Create Q-Q plot
+
+
+
+
+```
+
+**Question:** Does the data appear approximately normal? _____________
+
+---
+
+## Exercise 2.3: Check Independence
+
+```{r}
+# YOUR CODE HERE: Check if all patient_ids are unique
+
+
+
+```
+
+**Question:** Are observations independent? _____________
+
+---
+
+# Part 3: Hypothesis Testing - T-Tests 
+
+## Exercise 3.1: One-Sample T-Test 
+
+Test if the average temperature is **higher than** normal body temperature (37.0°C).
+
+```{r}
+# YOUR CODE HERE: Perform one-sample t-test
+# H0: mean temperature ≤ 37.0
+# H1: mean temperature > 37.0
+# Use alternative = "greater"
+
+
+
+
+```
+
+**Questions:**
+- p-value = _____________
+- Is temperature significantly higher than 37.0°C? (p < 0.05) _____________
+
+---
+
+## Exercise 3.2: Two-Sample T-Test 
+
+Test if heart rate differs between males and females.
+
+```{r}
+# YOUR CODE HERE: Before testing, check if variances are similar
+# Calculate variance by gender
+
+
+
+# YOUR CODE HERE: Perform two-sample t-test
+# H0: mean_male = mean_female
+# H1: mean_male ≠ mean_female
+
+
+
+
+```
+
+**Questions:**
+- p-value = _____________
+- Do males and females have significantly different heart rates? _____________
+
+---
+
+## Exercise 3.3: Paired T-Test 
+
+Create before/after data and test if heart rate changed after treatment.
+
+```{r}
+# Create paired data (first 40 patients, measured twice)
+set.seed(456)
+treatment_data <- data.frame(
+  patient_id = 1:40,
+  hr_before = round(rnorm(40, mean = 95, sd = 12)),
+  hr_after = round(rnorm(40, mean = 85, sd = 12))
+)
+
+# YOUR CODE HERE: Perform paired t-test
+# H0: mean difference = 0
+# H1: mean difference ≠ 0
+# Use paired = TRUE
+
+
+
+
+```
+
+**Questions:**
+- p-value = _____________
+- Did heart rate significantly change after treatment? _____________
+
+---
+
+# Part 4: Chi-Square Test
+
+## Exercise 4.1: Chi-Square Test
+
+Test if smoking status is associated with department.
+
+```{r}
+# YOUR CODE HERE: Create contingency table
+
+
+
+# YOUR CODE HERE: Perform chi-square test
+
+
+
+
+```
+
+**Questions:**
+- p-value = _____________
+- Is there a significant association between smoking and department? _____________
+
+---
+
+# Reflection Questions (Bonus)
+
+1. When would you use median instead of mean?
+
+**Your answer:** 
+
+2. What should you do if t-test assumptions are violated?
+
+**Your answer:** 
+
+3. What's the difference between a one-sample and two-sample t-test?
+
+**Your answer:** 
+
+---
+
+
+
+**Good luck!** 🎉
