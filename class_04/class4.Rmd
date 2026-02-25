@@ -553,15 +553,18 @@ When comparing two groups, their variances should be roughly similar (homogeneit
 
 ```{r}
 
+names(bp_data)
+table(bp_data$diabetes)
 library(dplyr)
 # Calculate variance for each group
 bp_data %>%
   # Split by diabetes status
-  group_by(diabetes) %>%
+  group_by(diabetes, department) %>%
   # Calculate variance for each group
   summarize(
-    variance = var(systolic_bp),
-    sd = sd(systolic_bp)
+    blabla = var(systolic_bp),
+    sd = sd(systolic_bp),
+    mean = mean(systolic_bp)
   )
 
 # Rule of thumb: Largest variance should be < 4 times the smallest variance
