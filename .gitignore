@@ -21,6 +21,10 @@
 # RStudio files
 .Rproj.user/
 
+# Global Document ignores
+*.pdf
+*.html
+
 # produced vignettes
 vignettes/*.html
 vignettes/*.pdf
