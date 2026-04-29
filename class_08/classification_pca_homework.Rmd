@@ -1,0 +1,240 @@
+---
+title: "Homework: Classification & Dimensionality Reduction"
+subtitle: "Decision Trees · Naïve Bayes · PCA"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+    code_folding: show
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo       = TRUE,
+  message    = FALSE,
+  warning    = FALSE,
+  fig.width  = 9,
+  fig.height = 5,
+  fig.align  = "center"
+)
+```
+
+## Setup
+
+```{r packages}
+library(mlbench)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+library(caret)
+library(pROC)
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(factoextra)
+
+theme_set(theme_minimal(base_size = 14))
+```
+
+We'll use the **BreastCancer** dataset from `mlbench` — a different dataset than the one used in class. It contains 699 observations of breast mass biopsies with 9 features and a binary outcome: benign vs. malignant.
+
+```{r load-data}
+data(BreastCancer)
+df <- BreastCancer
+
+# Remove the ID column and drop rows with missing values
+df <- df %>% select(-Id) %>% na.omit()
+
+# Convert all feature columns from factor to numeric
+df <- df %>%
+  mutate(across(-Class, ~as.numeric(as.character(.))))
+
+str(df)
+```
+
+```{r split}
+set.seed(123)
+idx   <- createDataPartition(df$Class, p = 0.75, list = FALSE)
+train <- df[idx, ]
+test  <- df[-idx, ]
+```
+
+---
+
+## Part 1 — Data Exploration
+
+### Q1.1
+
+What is the outcome distribution in the training set? What is the prevalence of malignant cases? Is this dataset balanced or imbalanced?
+
+```{r q1-1}
+# Your code here
+
+```
+
+### Q1.2
+
+Plot the density distributions of at least 3 features, colored by outcome (benign vs. malignant). Which features seem to separate the two groups best?
+
+```{r q1-2}
+# Your code here
+
+```
+
+---
+
+## Part 2 — Decision Tree
+
+### Q2.1
+
+Build a decision tree to predict `Class` from all features. Plot the tree. What is the first variable it splits on? Why do you think the algorithm chose that variable?
+
+```{r q2-1}
+# Your code here
+
+```
+
+### Q2.2
+
+Look at the cp table (`printcp`). What is the optimal cp value? Build a pruned tree using that value and plot it.
+
+```{r q2-2}
+# Your code here
+
+```
+
+### Q2.3
+
+Generate predictions on the test set. What is the accuracy? What is the sensitivity? What is the specificity?
+
+```{r q2-3}
+# Your code here
+
+```
+
+---
+
+## Part 3 — Naïve Bayes
+
+### Q3.1
+
+Build a Naïve Bayes model on the training set. Look at the model output — pick one feature and explain in your own words what the mean and standard deviation per class tell you.
+
+```{r q3-1}
+# Your code here
+
+```
+
+### Q3.2
+
+Generate predictions on the test set. Compare the confusion matrix to the decision tree from Q2.3. Which model has higher sensitivity? Which has higher specificity?
+
+```{r q3-2}
+# Your code here
+
+```
+
+### Q3.3
+
+Create a new observation with the following values and predict its class with both models (decision tree and Naïve Bayes). Do they agree?
+
+- Cl.thickness = 8, Cell.size = 5, Cell.shape = 5, Marg.adhesion = 3, Epith.c.size = 4, Bare.nuclei = 8, Bl.cromatin = 5, Normal.nucleoli = 5, Mitoses = 2
+
+```{r q3-3}
+# Your code here
+
+```
+
+---
+
+## Part 4 — Model Evaluation
+
+### Q4.1
+
+Plot the ROC curves for both models (decision tree and Naïve Bayes) on the same plot. Report the AUC for each. Which model discriminates better overall?
+
+```{r q4-1}
+# Your code here
+
+```
+
+### Q4.2
+
+In breast cancer screening, is it more important to minimize false negatives or false positives? Explain in 2–3 sentences, and state which metric (sensitivity or specificity) you would prioritize.
+
+> *Your answer here*
+
+### Q4.3
+
+Find the optimal threshold for the Naïve Bayes model using Youden's J. Apply it and show the new confusion matrix. How did sensitivity change compared to the default 0.5 threshold?
+
+```{r q4-3}
+# Your code here
+
+```
+
+---
+
+## Part 5 — PCA
+
+### Q5.1
+
+Run PCA on the training features (remember to scale). How many components are needed to explain at least 80% of the variance? Show the scree plot.
+
+```{r q5-1}
+# Your code here
+
+```
+
+### Q5.2
+
+Show the loadings for the first two components. Which original variables contribute most to PC1? Can you give PC1 an interpretive name?
+
+```{r q5-2}
+# Your code here
+
+```
+
+### Q5.3
+
+Plot the first two principal components colored by outcome. Is there visible separation between benign and malignant? How does this compare to the Pima diabetes PCA plot from class?
+
+```{r q5-3}
+# Your code here
+
+```
+
+---
+
+## Part 6 — PCA + Classifier
+
+### Q6.1
+
+Using the number of components you chose in Q5.1, build a decision tree and a Naïve Bayes model on the PCA-transformed data. Report the AUC for each.
+
+```{r q6-1}
+# Your code here
+
+```
+
+### Q6.2
+
+Compare all four models (raw tree, raw NB, PCA tree, PCA NB) in a single summary table with columns: Model, AUC, Number of Features. Did PCA help or hurt performance on this dataset?
+
+```{r q6-2}
+# Your code here
+
+```
+
+### Q6.3
+
+In 3–4 sentences: when would you recommend using PCA as a preprocessing step before classification, and when would you skip it?
+
+> *Your answer here*
+
+---
+
+*Good luck!*

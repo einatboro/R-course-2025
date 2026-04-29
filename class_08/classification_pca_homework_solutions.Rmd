@@ -1,0 +1,343 @@
+---
+title: "Homework Solutions: Classification & Dimensionality Reduction"
+subtitle: "Decision Trees · Naïve Bayes · PCA"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+    code_folding: show
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo       = TRUE,
+  message    = FALSE,
+  warning    = FALSE,
+  fig.width  = 9,
+  fig.height = 5,
+  fig.align  = "center"
+)
+```
+
+## Setup
+
+```{r packages}
+library(mlbench)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+library(caret)
+library(pROC)
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+library(factoextra)
+
+theme_set(theme_minimal(base_size = 14))
+```
+
+```{r load-data}
+data(BreastCancer)
+df <- BreastCancer
+
+df <- df %>% select(-Id) %>% na.omit()
+
+df <- df %>%
+  mutate(across(-Class, ~as.numeric(as.character(.))))
+
+str(df)
+```
+
+```{r split}
+set.seed(123)
+idx   <- createDataPartition(df$Class, p = 0.75, list = FALSE)
+train <- df[idx, ]
+test  <- df[-idx, ]
+```
+
+---
+
+## Part 1 — Data Exploration
+
+### Q1.1
+
+```{r q1-1}
+table(train$Class)
+prop.table(table(train$Class))
+```
+
+> The dataset has roughly 65% benign and 35% malignant cases. This is moderately imbalanced — similar ratio to the Pima diabetes dataset we saw in class, where the minority class was also ~35%.
+
+### Q1.2
+
+```{r q1-2, fig.height=7}
+train %>%
+  tidyr::pivot_longer(-Class, names_to = "feature", values_to = "value") %>%
+  ggplot(aes(x = value, fill = Class)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("benign" = "#5eead4", "malignant" = "#fb7185")) +
+  facet_wrap(~feature, scales = "free", ncol = 3) +
+  labs(title = "Feature Distributions by Outcome") +
+  theme(legend.position = "top")
+```
+
+> Most features show strong separation. Cell.size, Cell.shape, and Bare.nuclei stand out — malignant cases cluster at higher values while benign cases concentrate at low values (mostly 1). This dataset has much clearer separation than the Pima diabetes data.
+
+---
+
+## Part 2 — Decision Tree
+
+### Q2.1
+
+```{r q2-1, fig.width=10, fig.height=7}
+tree_model <- rpart(Class ~ ., data = train, method = "class")
+
+rpart.plot(tree_model,
+           type     = 4,
+           extra    = 104,
+           fallen.leaves = TRUE,
+           roundint = FALSE,
+           cex      = 0.9,
+           main     = "Decision Tree — Breast Cancer")
+```
+
+> The first split is on Cell.size (or Cell.shape, depending on the random seed). The algorithm chose it because it produces the largest reduction in Gini impurity — it's the single feature that best separates benign from malignant in one cut.
+
+### Q2.2
+
+```{r q2-2, fig.width=10, fig.height=7}
+printcp(tree_model)
+plotcp(tree_model)
+
+best_cp <- tree_model$cptable[which.min(tree_model$cptable[, "xerror"]), "CP"]
+cat("Best cp:", best_cp, "\n")
+
+tree_pruned <- prune(tree_model, cp = best_cp)
+
+rpart.plot(tree_pruned,
+           type     = 4,
+           extra    = 104,
+           fallen.leaves = TRUE,
+           roundint = FALSE,
+           cex      = 0.9,
+           main     = "Pruned Decision Tree")
+```
+
+### Q2.3
+
+```{r q2-3}
+tree_pred       <- predict(tree_pruned, test, type = "class")
+tree_pred_probs <- predict(tree_pruned, test, type = "prob")[, "malignant"]
+
+confusionMatrix(tree_pred, test$Class, positive = "malignant")
+```
+
+> The decision tree achieves high accuracy, sensitivity, and specificity on this dataset — much higher than what we saw with Pima diabetes. This is because the breast cancer features are more strongly predictive.
+
+---
+
+## Part 3 — Naïve Bayes
+
+### Q3.1
+
+```{r q3-1}
+nb_model <- naiveBayes(Class ~ ., data = train)
+
+nb_model
+```
+
+> For example, looking at Cell.size: the mean for benign is around 1.4 with a small SD, while the mean for malignant is around 6.6 with a larger SD. This tells us that benign tumors almost always have small cell sizes (clustered tightly around 1), while malignant tumors tend to have much larger cell sizes with more variation. The model uses these per-class distributions to calculate the likelihood term in Bayes' theorem.
+
+### Q3.2
+
+```{r q3-2}
+nb_pred       <- predict(nb_model, test, type = "class")
+nb_pred_probs <- predict(nb_model, test, type = "raw")[, "malignant"]
+
+confusionMatrix(nb_pred, test$Class, positive = "malignant")
+```
+
+> Comparing: both models perform well. Depending on the split, one may have slightly higher sensitivity and the other slightly higher specificity. The differences are small because the dataset is relatively easy to classify.
+
+### Q3.3
+
+```{r q3-3}
+new_obs <- data.frame(
+  Cl.thickness    = 8,
+  Cell.size       = 5,
+  Cell.shape      = 5,
+  Marg.adhesion   = 3,
+  Epith.c.size    = 4,
+  Bare.nuclei     = 8,
+  Bl.cromatin      = 5,
+  Normal.nucleoli = 5,
+  Mitoses         = 2
+)
+
+cat("Decision Tree:", predict(tree_pruned, new_obs, type = "class"), "\n")
+cat("  Probability:", predict(tree_pruned, new_obs, type = "prob")[, "malignant"], "\n\n")
+
+cat("Naïve Bayes:  ", predict(nb_model, new_obs, type = "class"), "\n")
+cat("  Probability:", predict(nb_model, new_obs, type = "raw")[, "malignant"], "\n")
+```
+
+> Both models should agree on malignant — the feature values are clearly in the malignant range (high cell size, high bare nuclei, high thickness).
+
+---
+
+## Part 4 — Model Evaluation
+
+### Q4.1
+
+```{r q4-1, fig.width=8, fig.height=6}
+roc_tree <- roc(test$Class, tree_pred_probs, levels = c("benign", "malignant"))
+roc_nb   <- roc(test$Class, nb_pred_probs,   levels = c("benign", "malignant"))
+
+plot(roc_tree, col = "#5eead4", lwd = 2,
+     main = "ROC Curves — Decision Tree vs. Naïve Bayes",
+     legacy.axes = TRUE, print.auc = TRUE, print.auc.y = 0.4)
+plot(roc_nb, col = "#fb7185", lwd = 2, add = TRUE,
+     print.auc = TRUE, print.auc.y = 0.3)
+legend("bottomright",
+       legend = c(paste0("Decision Tree (AUC=", round(auc(roc_tree), 3), ")"),
+                  paste0("Naïve Bayes (AUC=",   round(auc(roc_nb), 3),   ")")),
+       col = c("#5eead4", "#fb7185"), lwd = 2)
+```
+
+> Both AUCs are very high (likely > 0.95). Naïve Bayes often has a slightly higher AUC here because its probabilistic output creates a smoother ROC curve, while the decision tree's limited number of leaves produces fewer distinct probability levels.
+
+### Q4.2
+
+> In breast cancer screening, minimizing **false negatives** is critical — a missed malignant tumor means delayed treatment, which can be life-threatening. A false positive (flagging a benign case as malignant) leads to additional testing, which is stressful but not dangerous. Therefore we should prioritize **sensitivity** (recall) — the ability to catch all truly malignant cases.
+
+### Q4.3
+
+```{r q4-3}
+coords_nb <- coords(roc_nb, "best", best.method = "youden")
+
+cat("Optimal threshold:", round(coords_nb$threshold, 3), "\n")
+cat("Sensitivity:", round(coords_nb$sensitivity, 3), "\n")
+cat("Specificity:", round(coords_nb$specificity, 3), "\n\n")
+
+nb_pred_tuned <- factor(
+  ifelse(nb_pred_probs >= coords_nb$threshold, "malignant", "benign"),
+  levels = c("benign", "malignant")
+)
+
+confusionMatrix(nb_pred_tuned, test$Class, positive = "malignant")
+```
+
+> If the optimal threshold is below 0.5, sensitivity increases (we catch more malignant cases) at the cost of some specificity. If the default 0.5 was already near-optimal, the change may be small. On this dataset the effect is often modest because both classes are already well-separated.
+
+---
+
+## Part 5 — PCA
+
+### Q5.1
+
+```{r q5-1, fig.width=8, fig.height=5}
+features      <- train[, -10]
+outcome       <- train[, 10]
+features_test <- test[, -10]
+outcome_test  <- test[, 10]
+
+pca <- prcomp(features, center = TRUE, scale. = TRUE)
+
+summary(pca)
+
+fviz_eig(pca, addlabels = TRUE, ylim = c(0, 70),
+         main = "Scree Plot — Variance Explained",
+         barfill = "#22d3ee", barcolor = "#1e293b")
+
+cumvar <- cumsum(pca$sdev^2 / sum(pca$sdev^2)) * 100
+k <- which(cumvar >= 80)[1]
+cat("Components needed for 80% variance:", k, "\n")
+data.frame(PC = paste0("PC", 1:9), Cumulative_Variance_Pct = round(cumvar, 1))
+```
+
+> PC1 alone explains a large chunk of variance (often ~65%). Only 2–3 components are typically needed to reach 80%.
+
+### Q5.2
+
+```{r q5-2, fig.width=9, fig.height=6}
+round(pca$rotation[, 1:2], 3)
+
+fviz_pca_var(pca,
+             col.var    = "contrib",
+             gradient.cols = c("#475569", "#22d3ee", "#5eead4"),
+             repel      = TRUE,
+             title      = "PCA — Variable Loadings")
+```
+
+> PC1 has high loadings on most features — especially Cell.size, Cell.shape, Bare.nuclei, and Bl.cromatin. You could call PC1 something like **"overall tumor severity"** or **"cell abnormality index"** — it captures the general pattern that malignant tumors score high on nearly all measurements simultaneously.
+
+### Q5.3
+
+```{r q5-3, fig.width=9, fig.height=7}
+pca_scores <- as.data.frame(pca$x)
+pca_scores$Class <- outcome
+
+ggplot(pca_scores, aes(x = PC1, y = PC2, color = Class)) +
+  geom_point(alpha = 0.6, size = 2) +
+  scale_color_manual(values = c("benign" = "#5eead4", "malignant" = "#fb7185")) +
+  labs(title = "PCA — First Two Components",
+       x = paste0("PC1 (", round(cumvar[1], 1), "%)"),
+       y = paste0("PC2 (", round(cumvar[2] - cumvar[1], 1), "%)")) +
+  theme(legend.position = "top")
+```
+
+> The separation is **much clearer** here than in the Pima diabetes PCA plot. The two clusters are nearly distinct along PC1, with some overlap in the middle. This makes sense — the breast cancer features are more strongly predictive than the diabetes features, so PCA captures a cleaner signal.
+
+---
+
+## Part 6 — PCA + Classifier
+
+### Q6.1
+
+```{r q6-1}
+train_pca <- as.data.frame(predict(pca, features))[, 1:k, drop = FALSE]
+train_pca$Class <- outcome
+
+test_pca <- as.data.frame(predict(pca, features_test))[, 1:k, drop = FALSE]
+test_pca$Class <- outcome_test
+
+# Decision Tree on PCA
+tree_pca <- rpart(Class ~ ., data = train_pca, method = "class")
+tree_pca_probs <- predict(tree_pca, test_pca, type = "prob")[, "malignant"]
+roc_tree_pca   <- roc(test_pca$Class, tree_pca_probs, levels = c("benign", "malignant"))
+
+# Naïve Bayes on PCA
+nb_pca <- naiveBayes(Class ~ ., data = train_pca)
+nb_pca_probs <- predict(nb_pca, test_pca, type = "raw")[, "malignant"]
+roc_nb_pca   <- roc(test_pca$Class, nb_pca_probs, levels = c("benign", "malignant"))
+
+cat("Tree + PCA AUC:", round(auc(roc_tree_pca), 3), "\n")
+cat("NB   + PCA AUC:", round(auc(roc_nb_pca), 3),   "\n")
+```
+
+### Q6.2
+
+```{r q6-2}
+results <- data.frame(
+  Model    = c("Decision Tree", "Naïve Bayes", "Tree + PCA", "NB + PCA"),
+  AUC      = c(round(auc(roc_tree), 3),
+               round(auc(roc_nb), 3),
+               round(auc(roc_tree_pca), 3),
+               round(auc(roc_nb_pca), 3)),
+  Features = c(9, 9, k, k)
+)
+results
+```
+
+> On this dataset, PCA performance is very close to raw features — sometimes slightly lower, sometimes equal. This is because the dataset only has 9 features to begin with, and most of them are useful. PCA compresses well (only 2–3 components needed), but doesn't add much benefit since the original feature space is already manageable.
+
+### Q6.3
+
+> PCA is most useful when you have **many features** (dozens to thousands), especially when they are **correlated** with each other — PCA removes that redundancy. It also helps when you want to **visualize** high-dimensional data in 2D or reduce noise. You should **skip PCA** when you have few features, when interpretability matters (PCA components are harder to explain than original variables), or when the features are already uncorrelated and each carries unique information.
+
+---
+
+*End of solutions.*

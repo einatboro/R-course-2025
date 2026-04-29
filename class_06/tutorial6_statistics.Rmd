@@ -149,6 +149,9 @@ Now let's split by diabetes status to compare the two groups:
 
 ```{r describe-by-group}
 describeBy(Pima.tr[, -8], group = Pima.tr$type)
+
+
+do.call(cbind, describeBy(Pima.tr[, -8], group = Pima.tr$type))
 ```
 
 ---
