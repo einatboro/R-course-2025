@@ -1,0 +1,171 @@
+---
+title: "Data Visualization — Practice Problems"
+subtitle: "R for Clinicians · Lecture 07"
+author: "Optional · for those who want to practice"
+date: "`r format(Sys.Date(), '%B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 7,
+  fig.height = 4.5,
+  fig.align = "center"
+)
+```
+
+# About these problems
+
+These are practice problems, not graded homework. Solve any of them you
+find interesting. Skip any that don't speak to you.
+
+Solutions are in a separate file (`visualization_solutions.Rmd`) — try the
+problem first, then peek.
+
+## Setup
+
+```{r setup-data}
+library(tidyverse)
+library(mlbench)
+
+data("PimaIndiansDiabetes")
+
+# Same cleaning step from the workshop — zero-coded missing values removed
+pima <- PimaIndiansDiabetes |>
+  as_tibble() |>
+  filter(glucose > 0, mass > 0, pressure > 0)
+
+nrow(pima)
+```
+
+You will work with `pima` for all five problems. 752 patients, 9 variables.
+
+---
+
+# Problem 1 — A bar chart that earns its sort
+
+Create a categorical variable `bmi_class` from the `mass` column using the
+WHO BMI categories:
+
+| Category        | Range          |
+|-----------------|----------------|
+| Underweight     | < 18.5         |
+| Normal          | 18.5 – 24.9    |
+| Overweight      | 25.0 – 29.9    |
+| Obese class I   | 30.0 – 34.9    |
+| Obese class II  | 35.0 – 39.9    |
+| Obese class III | ≥ 40           |
+
+Build a bar chart showing how many patients fall into each category.
+Should you use `fct_reorder` here? Why or why not?
+
+```{r p1}
+# Your code:
+
+
+
+
+```
+
+---
+
+# Problem 2 — Bin width as a decision
+
+Build three histograms of `pedigree` (the diabetes pedigree function — a
+score summarising family history). Use three different bin widths:
+
+- `binwidth = 0.05`
+- `binwidth = 0.1`
+- `binwidth = 0.3`
+
+Which one would you publish in a paper? What does each of the other two
+hide or exaggerate?
+
+```{r p2}
+# Your code:
+
+
+
+
+```
+
+---
+
+# Problem 3 — Comparing groups, honestly
+
+Compare `pressure` (diastolic blood pressure, mmHg) between diabetic and
+non-diabetic patients.
+
+a) Build a boxplot.
+b) Add either `geom_jitter` or switch to a violin plot — choose based on
+   the sample size.
+c) Compute the median and IQR for each group with `dplyr`.
+d) The title of the chart should state the finding, not "boxplot of pressure".
+
+```{r p3}
+# Your code:
+
+
+
+
+```
+
+---
+
+# Problem 4 — Catch the lie
+
+Below is a chart someone built. It is technically correct — the numbers
+are real — but it lies visually.
+
+```{r p4-bad}
+group_summary <- pima |>
+  group_by(diabetes) |>
+  summarise(mean_glucose = mean(glucose))
+
+ggplot(group_summary, aes(x = diabetes, y = mean_glucose, fill = diabetes)) +
+  geom_col() +
+  coord_cartesian(ylim = c(110, 145)) +
+  scale_fill_manual(values = c("neg" = "#c45e5e", "pos" = "#c45e5e")) +
+  theme_gray() +
+  labs(title = "Glucose by group", x = NULL, y = "Glucose")
+```
+
+What is the lie? Estimate the lie factor (visual ratio ÷ numerical ratio).
+Then rebuild the chart honestly.
+
+```{r p4-fix}
+# Your code:
+
+
+
+
+```
+
+---
+
+# Problem 5 — Your own finding
+
+Pick **one** of the following. Build a single chart that makes the
+finding obvious to a clinician with thirty seconds and no patience:
+
+- Does `age` differ between diabetic and non-diabetic patients?
+- Does the relationship between `glucose` and `mass` look different for
+  diabetic versus non-diabetic patients?
+- Are higher numbers of pregnancies associated with diabetes?
+
+```{r p5}
+# Your code:
+
+
+
+
+```

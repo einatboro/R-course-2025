@@ -1,0 +1,501 @@
+---
+title: "The Grammar of Seeing — Workshop"
+subtitle: "Companion code for the data visualization lecture"
+author: "R for Clinicians · Lecture 07"
+date: "`r format(Sys.Date(), '%B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    theme: flatly
+    highlight: tango
+    code_folding: show
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 7,
+  fig.height = 4.5,
+  fig.align = "center",
+  dpi = 100
+)
+```
+
+# Before we start
+
+This file is the workshop companion to the lecture deck. The deck makes the
+argument; this file builds the charts. We use the same dataset throughout —
+`PimaIndiansDiabetes` — so the only thing changing from chunk to chunk is the
+visualization choice.
+
+> **The rule of this workshop:** every chunk should change exactly one thing.
+> Watch what happens.
+>
+> Homework is in a separate file (`visualization_homework.Rmd`).
+
+## Packages
+
+```{r packages}
+library(tidyverse)   # ggplot2, dplyr, forcats, tibble
+library(mlbench)     # PimaIndiansDiabetes dataset
+library(scales)      # nicer axis formatting
+```
+
+If any of these are missing:
+
+```{r install, eval=FALSE}
+install.packages(c("tidyverse", "mlbench", "scales"))
+```
+
+## The data
+
+```{r data}
+data("PimaIndiansDiabetes")
+pima <- as_tibble(PimaIndiansDiabetes)
+
+pima
+```
+
+A quick orientation:
+
+```{r data-glance}
+glimpse(pima)
+```
+
+768 patients, 8 numeric variables, 1 categorical outcome (`diabetes`).
+This is enough variety to demonstrate every chart type we care about.
+
+---
+
+# Part I — Why we visualize
+
+## Anscombe's Quartet — same statistics, different stories
+
+Before we touch `pima`, a quick demonstration of why summary statistics aren't
+enough. R ships with Anscombe's Quartet built in.
+
+```{r anscombe-stats}
+anscombe_long <- anscombe |>
+  pivot_longer(everything(),
+               names_to  = c(".value", "set"),
+               names_pattern = "(.)(.)")
+
+# Verify all four datasets have nearly identical statistics
+anscombe_long |>
+  group_by(set) |>
+  summarise(
+    mean_x = mean(x),
+    mean_y = round(mean(y), 2),
+    sd_x   = sd(x),
+    sd_y   = round(sd(y), 2),
+    cor    = round(cor(x, y), 3)
+  )
+```
+
+Now plot them:
+
+```{r anscombe-plot}
+ggplot(anscombe_long, aes(x, y)) +
+  geom_point(size = 2.5, color = "#d97757") +
+  geom_smooth(method = "lm", se = FALSE, color = "#4a4640") +
+  facet_wrap(~ set, labeller = label_both) +
+  theme_minimal()
+```
+
+**Identical mean, sd, correlation, regression line. Four completely different
+worlds.** This is why we don't trust the table alone.
+
+---
+
+# Part II — Building in ggplot2
+
+## The grammar in one chart
+
+Every ggplot is built in layers:
+
+```{r grammar-explicit}
+ggplot(data = pima) +                            # 1. data
+  aes(x = glucose, y = mass) +                   # 2. aesthetics
+  geom_point(alpha = 0.4, color = "#d97757") +   # 3. geometry
+  theme_minimal() +                              # 4. refinement
+  labs(x = "Glucose (mg/dL)", y = "BMI (kg/m²)")
+```
+
+## Why continuous goes to position, categorical goes to colour
+
+```{r mapping-logic}
+ggplot(pima, aes(x = glucose, y = mass, color = diabetes)) +
+  geom_point(alpha = 0.5) +
+  scale_color_manual(values = c("neg" = "#9a958c", "pos" = "#d97757")) +
+  theme_minimal() +
+  labs(
+    x = "Glucose (mg/dL)",
+    y = "BMI (kg/m²)",
+    color = "Diabetes"
+  )
+```
+
+Position carries the two continuous measurements (the precise channels).
+Colour carries the categorical group (the weaker channel, but enough to
+distinguish two classes).
+
+---
+
+# Part III — The three winning charts
+
+## 1. Bar chart — comparing categories
+
+We need a categorical variable to count. The Pima dataset only has `diabetes`,
+so let's build a more interesting one by binning age:
+
+```{r bar-data}
+pima_age <- pima |>
+  mutate(
+    age_group = cut(age,
+                    breaks = c(20, 30, 40, 50, 60, 90),
+                    labels = c("21–30", "31–40", "41–50", "51–60", "61+"),
+                    right  = FALSE)
+  )
+
+age_counts <- pima_age |>
+  count(age_group)
+
+age_counts
+```
+
+### Naive bar chart
+
+```{r bar-v1}
+ggplot(age_counts, aes(x = age_group, y = n)) +
+  geom_col()
+```
+
+### Apply the three rules
+
+**Rule 1 — y starts at zero (already does for `geom_col`, but be explicit):**
+
+```{r bar-v2}
+ggplot(age_counts, aes(x = age_group, y = n)) +
+  geom_col(fill = "#d97757") +
+  scale_y_continuous(expand = expansion(mult = c(0, .05)))
+```
+
+**Rule 2 — sort by value with `fct_reorder`:**
+
+```{r bar-v3}
+ggplot(age_counts, aes(x = fct_reorder(age_group, n), y = n)) +
+  geom_col(fill = "#d97757") +
+  scale_y_continuous(expand = expansion(mult = c(0, .05)))
+```
+
+> **When NOT to sort:** ordinal categories like age groups have a natural order.
+> For a real ordered category we'd skip `fct_reorder`. Switch to a different
+> example to see sorting earn its keep:
+
+```{r bar-sort-correct}
+# Imagine departments instead of ages — no inherent order
+dept <- tibble(
+  department = c("Cardiology", "Internal Med A", "Emergency",
+                 "Neurology", "Paediatric ICU", "Oncology"),
+  n = c(142, 198, 87, 64, 41, 113)
+)
+
+ggplot(dept, aes(x = fct_reorder(department, n), y = n)) +
+  geom_col(fill = "#d97757") +
+  scale_y_continuous(expand = expansion(mult = c(0, .05)))
+```
+
+**Rule 3 — long labels? `coord_flip()`:**
+
+```{r bar-v4}
+ggplot(dept, aes(x = fct_reorder(department, n), y = n)) +
+  geom_col(fill = "#d97757") +
+  coord_flip() +
+  scale_y_continuous(expand = expansion(mult = c(0, .05))) +
+  labs(x = NULL, y = "Patients") +
+  theme_minimal()
+```
+
+---
+
+## 2. Histogram — distribution shape
+
+### Default — what does ggplot2 give us?
+
+```{r hist-v1}
+ggplot(pima, aes(x = glucose)) +
+  geom_histogram()
+```
+
+ggplot warns: *"stat_bin() using `bins = 30`. Pick better value with
+`binwidth`."* It's right. 30 is arbitrary.
+
+### Filter the zeros
+
+Glucose = 0 is impossible — those are missing values coded as zero.
+Same for `mass`, `pressure`, `triceps`, `insulin`. Always check.
+
+```{r hist-clean}
+pima_clean <- pima |>
+  filter(glucose > 0, mass > 0, pressure > 0)
+
+nrow(pima)         # before
+nrow(pima_clean)   # after
+```
+
+### Bin width matters
+
+```{r hist-binwidth-coarse, fig.height=3.5}
+ggplot(pima_clean, aes(x = glucose)) +
+  geom_histogram(binwidth = 30, fill = "#c45e5e", color = "white")
+```
+
+Too coarse — the structure is hidden.
+
+```{r hist-binwidth-fine, fig.height=3.5}
+ggplot(pima_clean, aes(x = glucose)) +
+  geom_histogram(binwidth = 2, fill = "#c45e5e", color = "white")
+```
+
+Too fine — pure noise.
+
+```{r hist-binwidth-good, fig.height=3.5}
+ggplot(pima_clean, aes(x = glucose)) +
+  geom_histogram(binwidth = 5, fill = "#d97757", color = "white") +
+  theme_minimal()
+```
+
+Right. Now we can see the shape: roughly normal around 110, with a long
+right tail and a small bump near 100. That bump is interesting — it's the
+diabetic group leaking into the healthy distribution.
+
+### Why `color = "white"` matters
+
+The white outline acts as a separator between bins. It costs no data ink
+but gains huge readability.
+
+---
+
+## 3. Box plot — beyond the average
+
+### Single boxplot
+
+```{r box-v1}
+ggplot(pima_clean, aes(y = glucose)) +
+  geom_boxplot()
+```
+
+That's the five-number summary in one shape: min, Q1, median, Q3, max,
+plus outliers as dots.
+
+### Compared across groups — this is where boxplots earn their keep
+
+```{r box-v2}
+ggplot(pima_clean, aes(x = diabetes, y = glucose, fill = diabetes)) +
+  geom_boxplot(alpha = 0.6, outlier.color = "#c45e5e") +
+  scale_fill_manual(values = c("neg" = "#9a958c", "pos" = "#d97757")) +
+  theme_minimal() +
+  labs(x = NULL, y = "Glucose (mg/dL)") +
+  theme(legend.position = "none")
+```
+
+Diabetic patients have higher glucose. The medians don't even overlap with
+the boxes of the other group — that's a strong visual signal.
+
+### Upgrade 1: when there are few points, add `geom_jitter`
+
+```{r box-jitter}
+pima_small <- pima_clean |>
+  group_by(diabetes) |>
+  slice_sample(n = 30) |>
+  ungroup()
+
+ggplot(pima_small, aes(x = diabetes, y = glucose, fill = diabetes)) +
+  geom_boxplot(alpha = 0.4, outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.7, size = 2) +
+  scale_fill_manual(values = c("neg" = "#9a958c", "pos" = "#d97757")) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(x = NULL, y = "Glucose (mg/dL)",
+       subtitle = "n = 30 per group, individual points shown")
+```
+
+### Upgrade 2: when there are many points, switch to violin
+
+```{r violin}
+ggplot(pima_clean, aes(x = diabetes, y = glucose, fill = diabetes)) +
+  geom_violin(alpha = 0.5, color = NA) +
+  geom_boxplot(width = 0.15, fill = "white", outlier.shape = NA) +
+  scale_fill_manual(values = c("neg" = "#9a958c", "pos" = "#d97757")) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(x = NULL, y = "Glucose (mg/dL)")
+```
+
+The violin reveals what the box hides — the shape of the distribution
+inside the IQR. Notice the diabetic group's density is bimodal-ish; the
+boxplot alone would never show that.
+
+---
+
+# Part IV — Refining and storytelling
+
+We'll take one chart and walk it through a refinement pipeline.
+
+## v1 — The default
+
+```{r refine-v1}
+ggplot(pima_clean, aes(x = glucose, fill = diabetes)) +
+  geom_histogram(binwidth = 5)
+```
+
+## v2 — Theme and palette
+
+```{r refine-v2}
+ggplot(pima_clean, aes(x = glucose, fill = diabetes)) +
+  geom_histogram(binwidth = 5, color = "white", alpha = 0.8) +
+  scale_fill_manual(values = c("neg" = "#9a958c", "pos" = "#d97757")) +
+  theme_minimal()
+```
+
+## v3 — Title states the finding
+
+```{r refine-v3}
+ggplot(pima_clean, aes(x = glucose, fill = diabetes)) +
+  geom_histogram(binwidth = 5, color = "white", alpha = 0.8) +
+  scale_fill_manual(values = c("neg" = "#9a958c", "pos" = "#d97757")) +
+  labs(
+    title    = "Diabetic patients cluster at higher glucose levels",
+    subtitle = "Pima Indians cohort · n = 752 after removing zero-coded missing values",
+    x        = "Glucose (mg/dL)",
+    y        = "Number of patients",
+    fill     = "Diabetes",
+    caption  = "Source: PimaIndiansDiabetes, mlbench package"
+  ) +
+  theme_minimal()
+```
+
+## v4 — Strategic colour: highlight one group only
+
+```{r refine-v4}
+ggplot(pima_clean, aes(x = glucose, fill = diabetes)) +
+  geom_histogram(binwidth = 5, color = "white", alpha = 0.85,
+                 position = "identity") +
+  scale_fill_manual(
+    values = c("neg" = "#cdc8bf", "pos" = "#d97757"),
+    labels = c("Healthy", "Diabetic")
+  ) +
+  labs(
+    title    = "Diabetic patients cluster at higher glucose levels",
+    subtitle = "Pima Indians cohort · n = 752",
+    x        = "Glucose (mg/dL)",
+    y        = "Number of patients",
+    fill     = NULL,
+    caption  = "Source: PimaIndiansDiabetes, mlbench"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position    = "top",
+    plot.title         = element_text(face = "bold", size = 14),
+    plot.subtitle      = element_text(color = "grey40"),
+    panel.grid.minor   = element_blank(),
+    panel.grid.major.x = element_blank()
+  )
+```
+
+The diabetic distribution is the message — colour it warmly. The healthy
+distribution is the comparison baseline — let it recede.
+
+## Viridis for continuous scales
+
+When you genuinely need a colour gradient (heatmaps, density plots,
+continuous variables encoded as colour), use viridis. It's perceptually
+uniform and colour-blind safe.
+
+```{r viridis}
+ggplot(pima_clean, aes(x = glucose, y = mass, color = age)) +
+  geom_point(alpha = 0.7, size = 2) +
+  scale_color_viridis_c(option = "magma") +
+  theme_minimal() +
+  labs(
+    x = "Glucose (mg/dL)",
+    y = "BMI (kg/m²)",
+    color = "Age",
+    title = "Older patients drift toward the high-glucose, high-BMI corner"
+  )
+```
+
+---
+
+# The lie factor — what NOT to do
+
+This chunk is intentionally bad. Don't ship this.
+
+```{r lie-factor, fig.height=4}
+# Truncated y-axis — exaggerates differences
+group_means <- pima_clean |>
+  group_by(diabetes) |>
+  summarise(mean_glucose = mean(glucose))
+
+ggplot(group_means, aes(x = diabetes, y = mean_glucose, fill = diabetes)) +
+  geom_col() +
+  coord_cartesian(ylim = c(100, 145)) +   # <-- THE LIE
+  scale_fill_manual(values = c("neg" = "#c45e5e", "pos" = "#c45e5e")) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "DON'T DO THIS — y axis truncated",
+       x = NULL, y = "Glucose")
+```
+
+Compare to the honest version:
+
+```{r honest, fig.height=4}
+ggplot(group_means, aes(x = diabetes, y = mean_glucose, fill = diabetes)) +
+  geom_col() +
+  scale_y_continuous(expand = expansion(mult = c(0, .05))) +
+  scale_fill_manual(values = c("neg" = "#9a958c", "pos" = "#6cb585")) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(title = "Honest version — y starts at zero",
+       x = NULL, y = "Mean glucose (mg/dL)")
+```
+
+Same data. Same comparison. The first chart screams; the second informs.
+The lie factor of the first is roughly 4 — the visual difference is four
+times larger than the numerical difference.
+
+---
+
+# Cheat sheet — the rules in one place
+
+```{r cheatsheet, echo=FALSE}
+tribble(
+  ~Rule, ~Code,
+  "y axis starts at zero",     'scale_y_continuous(expand = expansion(mult = c(0, .05)))',
+  "Sort bars by value",        'fct_reorder(category, value)',
+  "Long labels? Flip",         'coord_flip()',
+  "Bin width with units",      'geom_histogram(binwidth = 5, color = "white")',
+  "See individual points",     'geom_jitter(width = 0.15)',
+  "See full distribution",     'geom_violin() + geom_boxplot(width = 0.15)',
+  "Title = the finding",       'labs(title = "Diabetic patients cluster higher")',
+  "Units in axis labels",      'labs(x = "Glucose (mg/dL)")',
+  "Highlight, don\'t decorate", 'scale_fill_manual(values = c("focus" = "#d97757", "rest" = "grey80"))',
+  "Continuous colour scale",   'scale_color_viridis_c()',
+  "Strip the gridlines",       'theme_minimal() + theme(panel.grid.minor = element_blank())'
+)
+```
+
+---
+
+# Session info
+
+For reproducibility:
+
+```{r session}
+sessionInfo()
+```

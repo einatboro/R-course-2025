@@ -1,0 +1,303 @@
+---
+title: "Data Visualization — Practice Solutions"
+subtitle: "R for Clinicians · Lecture 07"
+date: "`r format(Sys.Date(), '%B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: flatly
+    highlight: tango
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 7,
+  fig.height = 4.5,
+  fig.align = "center"
+)
+```
+
+# About this file
+
+One worked solution per problem. Yours may differ — there's no single
+correct chart. What matters is that the chart applies the principles from
+the lecture deliberately.
+
+## Setup
+
+```{r setup-data}
+library(tidyverse)
+library(mlbench)
+library(scales)
+
+data("PimaIndiansDiabetes")
+
+pima <- PimaIndiansDiabetes |>
+  as_tibble() |>
+  filter(glucose > 0, mass > 0, pressure > 0)
+```
+
+---
+
+# Problem 1 — BMI categories
+
+The point of this problem: `fct_reorder` is a tool, not a reflex. BMI
+categories have an inherent order (Underweight → Obese III). Sorting by
+count would scramble that order and force the reader to mentally
+reconstruct the natural sequence. The order of the x-axis is itself
+information.
+
+```{r p1-solution}
+pima_bmi <- pima |>
+  mutate(
+    bmi_class = case_when(
+      mass < 18.5  ~ "Underweight",
+      mass < 25.0  ~ "Normal",
+      mass < 30.0  ~ "Overweight",
+      mass < 35.0  ~ "Obese I",
+      mass < 40.0  ~ "Obese II",
+      TRUE         ~ "Obese III"
+    ),
+    bmi_class = factor(bmi_class,
+                       levels = c("Underweight", "Normal", "Overweight",
+                                  "Obese I", "Obese II", "Obese III"))
+  )
+
+ggplot(pima_bmi, aes(x = bmi_class)) +
+  geom_bar(fill = "#d97757") +
+  scale_y_continuous(expand = expansion(mult = c(0, .05))) +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(),
+        panel.grid.minor   = element_blank()) +
+  labs(
+    title    = "Most patients in the cohort are overweight or obese",
+    subtitle = "WHO BMI classification, n = 752",
+    x        = NULL,
+    y        = "Number of patients"
+  )
+```
+
+The `factor()` call with explicit `levels` is what locks the natural
+order. Without it, the categories appear alphabetically (Normal, Obese I,
+Obese II, Obese III, Overweight, Underweight) — which is nonsense.
+
+---
+
+# Problem 2 — Bin width
+
+Same data, three completely different stories. `pedigree` ranges roughly
+0.08 to 2.4 with a strong right skew. `binwidth = 0.3` collapses the
+skew, `binwidth = 0.05` fragments the shape into noise, `binwidth = 0.1`
+is the sweet spot.
+
+```{r p2-too-fine, fig.height=3.5}
+ggplot(pima, aes(x = pedigree)) +
+  geom_histogram(binwidth = 0.05, fill = "#c45e5e", color = "white") +
+  theme_minimal() +
+  labs(title = "binwidth = 0.05 — too fine",
+       x = "Pedigree score", y = "Count")
+```
+
+Bars start oscillating because of small-sample variation within each
+narrow bin. Most of the visual variation here is statistical noise, not
+signal.
+
+```{r p2-just-right, fig.height=3.5}
+ggplot(pima, aes(x = pedigree)) +
+  geom_histogram(binwidth = 0.1, fill = "#d97757", color = "white") +
+  theme_minimal() +
+  labs(title = "binwidth = 0.1 — just right",
+       subtitle = "Right-skewed, mode around 0.25, long tail past 1.5",
+       x = "Pedigree score", y = "Count")
+```
+
+Clean shape — mode, skew, and tail all visible.
+
+```{r p2-too-coarse, fig.height=3.5}
+ggplot(pima, aes(x = pedigree)) +
+  geom_histogram(binwidth = 0.3, fill = "#9a958c", color = "white") +
+  theme_minimal() +
+  labs(title = "binwidth = 0.3 — too coarse",
+       x = "Pedigree score", y = "Count")
+```
+
+The skew is hidden. The distribution looks almost symmetric, which is
+misleading.
+
+---
+
+# Problem 3 — Diastolic pressure by group
+
+```{r p3-counts}
+pima |> count(diabetes)
+```
+
+n = 484 healthy, 268 diabetic. Both groups large, so a violin plot will
+work better than `geom_jitter` (which would over-plot at this size).
+
+```{r p3-chart}
+ggplot(pima, aes(x = diabetes, y = pressure, fill = diabetes)) +
+  geom_violin(alpha = 0.5, color = NA) +
+  geom_boxplot(width = 0.15, fill = "white", outlier.shape = NA) +
+  scale_fill_manual(values = c("neg" = "#9a958c", "pos" = "#d97757")) +
+  scale_x_discrete(labels = c("neg" = "Healthy", "pos" = "Diabetic")) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(
+    title    = "Diabetic patients have modestly higher diastolic pressure",
+    subtitle = "Distributions overlap heavily — the difference is small",
+    x        = NULL,
+    y        = "Diastolic blood pressure (mmHg)"
+  )
+```
+
+```{r p3-stats}
+pima |>
+  group_by(diabetes) |>
+  summarise(
+    n         = n(),
+    median_bp = median(pressure),
+    Q1        = quantile(pressure, 0.25),
+    Q3        = quantile(pressure, 0.75),
+    IQR       = IQR(pressure)
+  )
+```
+
+Healthy: median 70 mmHg, IQR 64–78. Diabetic: median 74, IQR 68–82. The
+diabetic group has slightly higher diastolic pressure on average, but the
+distributions overlap substantially. Pressure alone is not a strong
+discriminator.
+
+---
+
+# Problem 4 — Catch the lie
+
+The lie is the truncated y-axis. It starts at 110 instead of 0.
+
+```{r p4-numbers}
+pima |>
+  group_by(diabetes) |>
+  summarise(mean_glucose = mean(glucose))
+```
+
+Numerically: 110.0 vs 142.3, a ratio of ~1.3. The diabetic mean is 30%
+higher than the healthy mean, not 400% higher.
+
+In the bad chart, the diabetic bar is roughly 4–5× the height of the
+healthy bar. **Lie factor ≈ 4.5 / 1.3 ≈ 3.5.** The chart visually
+exaggerates the difference by about three and a half times.
+
+The fix: let y start at zero so the visual ratio matches the numerical
+ratio.
+
+```{r p4-fix}
+group_summary <- pima |>
+  group_by(diabetes) |>
+  summarise(mean_glucose = mean(glucose))
+
+ggplot(group_summary, aes(x = diabetes, y = mean_glucose, fill = diabetes)) +
+  geom_col(width = 0.6) +
+  scale_y_continuous(expand = expansion(mult = c(0, .05))) +
+  scale_fill_manual(values = c("neg" = "#9a958c", "pos" = "#d97757")) +
+  scale_x_discrete(labels = c("neg" = "Healthy", "pos" = "Diabetic")) +
+  theme_minimal() +
+  theme(legend.position    = "none",
+        panel.grid.major.x = element_blank(),
+        panel.grid.minor   = element_blank()) +
+  labs(
+    title    = "Diabetic patients average ~30% higher glucose",
+    subtitle = "Mean fasting glucose, Pima Indians cohort",
+    x        = NULL,
+    y        = "Mean glucose (mg/dL)"
+  )
+```
+
+Notice the difference is still clearly visible — it just isn't
+sensationalized. The honest chart tells you what's true.
+
+---
+
+# Problem 5 — Three solutions, one per option
+
+Any of the three is a fine choice. They each test something slightly
+different.
+
+## Option A — Age by group
+
+```{r p5-age}
+ggplot(pima, aes(x = diabetes, y = age, fill = diabetes)) +
+  geom_violin(alpha = 0.5, color = NA) +
+  geom_boxplot(width = 0.15, fill = "white", outlier.shape = NA) +
+  scale_fill_manual(values = c("neg" = "#9a958c", "pos" = "#d97757")) +
+  scale_x_discrete(labels = c("neg" = "Healthy", "pos" = "Diabetic")) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  labs(
+    title    = "Diabetic patients are older — median 36 vs 27",
+    subtitle = "The healthy group skews young; the diabetic group is more uniform",
+    x        = NULL,
+    y        = "Age (years)"
+  )
+```
+
+## Option B — Glucose × BMI by group
+
+The two-by-two scatter is more informative than a single dimension because
+it shows where the diagnosis lives in the joint space.
+
+```{r p5-scatter}
+ggplot(pima, aes(x = glucose, y = mass, color = diabetes)) +
+  geom_point(alpha = 0.55, size = 1.8) +
+  scale_color_manual(values = c("neg" = "#9a958c", "pos" = "#d97757"),
+                     labels = c("Healthy", "Diabetic")) +
+  theme_minimal() +
+  theme(legend.position = "top") +
+  labs(
+    title    = "Diabetic patients cluster at high glucose AND high BMI",
+    subtitle = "The diagnosis lives in the upper-right corner of the joint distribution",
+    x        = "Glucose (mg/dL)",
+    y        = "BMI (kg/m²)",
+    color    = NULL
+  )
+```
+
+## Option C — Pregnancies and diabetes
+
+This one is a trap if you plot raw counts — the groups are unequal in
+size, so raw counts are uninterpretable. The right framing is *proportion
+diabetic* within each pregnancy group.
+
+```{r p5-pregnancies}
+pima |>
+  mutate(
+    pregnant_grp = case_when(
+      pregnant == 0 ~ "0",
+      pregnant <= 2 ~ "1–2",
+      pregnant <= 5 ~ "3–5",
+      TRUE          ~ "6+"
+    ),
+    pregnant_grp = factor(pregnant_grp, levels = c("0", "1–2", "3–5", "6+"))
+  ) |>
+  count(pregnant_grp, diabetes) |>
+  group_by(pregnant_grp) |>
+  mutate(prop = n / sum(n)) |>
+  filter(diabetes == "pos") |>
+  ggplot(aes(x = pregnant_grp, y = prop)) +
+  geom_col(fill = "#d97757") +
+  scale_y_continuous(labels = percent_format(),
+                     expand = expansion(mult = c(0, .05))) +
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank()) +
+  labs(
+    title    = "Diabetes prevalence rises sharply with pregnancies",
+    subtitle = "From ~16% in nulliparous patients to ~55% with 6 or more",
+    x        = "Number of pregnancies",
+    y        = "Proportion diabetic"
+  )
+```
