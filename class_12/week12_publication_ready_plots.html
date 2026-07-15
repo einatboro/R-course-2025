@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Publication-Ready Plots in R</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root {
+  --bg: #0a0e17;
+  --card: #111827;
+  --card2: #1a2332;
+  --accent: #34d399;
+  --accent-dim: #065f46;
+  --glow: rgba(52,211,153,0.12);
+  --t1: #f1f5f9;
+  --t2: #94a3b8;
+  --t3: #475569;
+  --border: #1e293b;
+  --rose: #fb7185;
+  --amber: #fbbf24;
+  --cyan: #22d3ee;
+  --violet: #a78bfa;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family: 'Heebo', sans-serif;
+  background: var(--bg);
+  color: var(--t1);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+.mono { font-family: 'IBM Plex Mono', monospace; }
+
+.deck { display:flex; flex-direction:column; height:100vh; padding:1.5rem 2.5rem; }
+@media(max-width:768px){ .deck { padding:1rem 1.25rem; } }
+
+.top { display:flex; justify-content:space-between; align-items:center; padding-bottom:1rem; border-bottom:1px solid var(--border); flex-shrink:0; }
+.top-label { font-size:0.75rem; color:var(--t3); letter-spacing:0.08em; text-transform:uppercase; }
+.top-label span { color:var(--accent); font-weight:700; }
+.ptrack { width:120px; height:3px; background:var(--border); border-radius:2px; overflow:hidden; }
+.pfill { height:100%; background:var(--accent); border-radius:2px; transition:width 0.4s ease; }
+
+.area { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:1rem 0; }
+
+.s { display:none; width:100%; max-width:1100px; animation:fadeUp 0.4s ease; }
+.s.active { display:flex; flex-direction:column; justify-content:center; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+
+.bottom { display:flex; justify-content:space-between; align-items:center; padding-top:1rem; border-top:1px solid var(--border); flex-shrink:0; font-size:0.75rem; color:var(--t3); }
+.bottom .nav { display:flex; gap:0.5rem; }
+.bottom button {
+  background:var(--card); color:var(--t2); border:1px solid var(--border);
+  padding:0.4rem 0.9rem; border-radius:6px; cursor:pointer; font-family:'IBM Plex Mono',monospace;
+  font-size:0.7rem; transition:all 0.2s;
+}
+.bottom button:hover { background:var(--card2); color:var(--accent); border-color:var(--accent-dim); }
+
+/* Slide types */
+.kicker { font-family:'IBM Plex Mono',monospace; color:var(--accent); font-size:0.85rem; letter-spacing:0.15em; text-transform:uppercase; margin-bottom:1.25rem; }
+.kicker.amber { color:var(--amber); }
+.kicker.cyan { color:var(--cyan); }
+.kicker.violet { color:var(--violet); }
+.kicker.rose { color:var(--rose); }
+
+h1.title { font-size:clamp(2.5rem, 5vw, 4.5rem); font-weight:900; line-height:1.05; letter-spacing:-0.02em; margin-bottom:1.5rem; }
+h2.subtitle { font-size:clamp(1.2rem, 2vw, 1.6rem); font-weight:300; color:var(--t2); line-height:1.4; max-width:800px; }
+
+h1.big { font-size:clamp(3rem, 6vw, 5rem); font-weight:900; line-height:1; letter-spacing:-0.03em; }
+h1.huge { font-size:clamp(4rem, 9vw, 8rem); font-weight:900; line-height:0.95; letter-spacing:-0.04em; }
+
+h2.q { font-size:clamp(2rem, 4vw, 3.2rem); font-weight:700; line-height:1.15; max-width:900px; }
+
+p.lead { font-size:clamp(1.1rem, 1.6vw, 1.4rem); color:var(--t2); line-height:1.55; max-width:850px; }
+p.small { font-size:0.95rem; color:var(--t2); line-height:1.6; }
+
+/* Cover slide */
+.cover { text-align:center; }
+.cover .pre { font-family:'IBM Plex Mono',monospace; color:var(--t3); font-size:0.85rem; letter-spacing:0.2em; text-transform:uppercase; margin-bottom:2rem; }
+.cover h1 { font-size:clamp(3rem, 7vw, 6rem); font-weight:900; line-height:1; letter-spacing:-0.03em; margin-bottom:2rem; }
+.cover h1 .accent { color:var(--accent); }
+.cover .sub { font-size:1.25rem; color:var(--t2); font-weight:300; margin-bottom:3rem; }
+.cover .meta { display:flex; justify-content:center; gap:3rem; font-family:'IBM Plex Mono',monospace; font-size:0.8rem; color:var(--t3); }
+.cover .meta span strong { color:var(--accent); display:block; font-size:1.2rem; margin-top:0.3rem; font-weight:700; }
+
+/* Section divider */
+.divider { text-align:center; }
+.divider .num { font-family:'IBM Plex Mono',monospace; font-size:1rem; color:var(--accent); letter-spacing:0.2em; margin-bottom:1.5rem; }
+.divider h1 { font-size:clamp(3rem, 7vw, 5.5rem); font-weight:900; line-height:1; letter-spacing:-0.03em; margin-bottom:1.5rem; }
+.divider .desc { font-size:1.2rem; color:var(--t2); font-weight:300; max-width:600px; margin:0 auto; }
+.divider .duration { display:inline-block; margin-top:2rem; padding:0.4rem 1rem; border:1px solid var(--accent-dim); border-radius:20px; color:var(--accent); font-family:'IBM Plex Mono',monospace; font-size:0.75rem; letter-spacing:0.1em; }
+
+/* Compare two visuals */
+.compare { display:grid; grid-template-columns:1fr 1fr; gap:2rem; }
+.compare .panel { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; }
+.compare .panel h3 { font-size:0.85rem; font-family:'IBM Plex Mono',monospace; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:1rem; }
+.compare .bad h3 { color:var(--rose); }
+.compare .good h3 { color:var(--accent); }
+.compare .panel svg { width:100%; height:auto; }
+.compare .label { font-size:0.8rem; color:var(--t3); margin-top:0.75rem; font-family:'IBM Plex Mono',monospace; }
+
+/* Code block */
+.code {
+  background:#0d1422; border:1px solid var(--border); border-radius:10px;
+  padding:1.5rem 1.75rem; font-family:'IBM Plex Mono',monospace;
+  font-size:0.95rem; line-height:1.7; color:var(--t1);
+  overflow-x:auto;
+}
+.code .c-fn { color:var(--cyan); }
+.code .c-str { color:var(--amber); }
+.code .c-num { color:var(--rose); }
+.code .c-com { color:var(--t3); font-style:italic; }
+.code .c-key { color:var(--violet); }
+.code .c-arg { color:var(--accent); }
+
+/* Two col */
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:2.5rem; align-items:center; }
+.two-col.narrow-left { grid-template-columns:0.7fr 1fr; }
+.two-col.narrow-right { grid-template-columns:1fr 0.7fr; }
+
+/* Three col cards */
+.three { display:grid; grid-template-columns:repeat(3,1fr); gap:1.25rem; }
+.three .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1.5rem; }
+.three .card .icon { font-family:'IBM Plex Mono',monospace; font-size:0.75rem; color:var(--accent); letter-spacing:0.1em; margin-bottom:0.75rem; }
+.three .card h4 { font-size:1.1rem; font-weight:700; margin-bottom:0.5rem; }
+.three .card p { font-size:0.9rem; color:var(--t2); line-height:1.5; }
+
+/* Bullets minimal */
+ul.minimal { list-style:none; padding:0; }
+ul.minimal li { padding:0.6rem 0; border-bottom:1px solid var(--border); font-size:1.05rem; color:var(--t1); display:flex; gap:1rem; }
+ul.minimal li:last-child { border-bottom:none; }
+ul.minimal li .num { font-family:'IBM Plex Mono',monospace; color:var(--accent); font-weight:700; min-width:1.5rem; }
+ul.minimal li .label { color:var(--t2); font-size:0.95rem; }
+
+/* Big stat */
+.stat { text-align:center; }
+.stat .num { font-size:clamp(5rem, 12vw, 11rem); font-weight:900; color:var(--accent); line-height:1; letter-spacing:-0.04em; }
+.stat .label { font-size:1.1rem; color:var(--t2); margin-top:1rem; max-width:600px; margin-left:auto; margin-right:auto; }
+
+/* Anatomy diagram */
+.anatomy-svg { width:100%; max-height:500px; }
+
+/* Checklist */
+.checklist { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:2rem 2.5rem; max-width:750px; margin:0 auto; }
+.checklist .item { display:flex; align-items:flex-start; gap:1rem; padding:0.85rem 0; border-bottom:1px solid var(--border); }
+.checklist .item:last-child { border-bottom:none; }
+.checklist .item .box { width:22px; height:22px; border:2px solid var(--accent); border-radius:4px; flex-shrink:0; margin-top:2px; }
+.checklist .item .text { font-size:1.05rem; color:var(--t1); line-height:1.5; }
+.checklist .item .text small { display:block; color:var(--t2); font-size:0.85rem; margin-top:0.25rem; }
+
+/* Mission card */
+.mission { background:linear-gradient(135deg, var(--card) 0%, var(--card2) 100%); border:1px solid var(--accent-dim); border-radius:14px; padding:2.5rem; }
+.mission .label { color:var(--accent); font-family:'IBM Plex Mono',monospace; font-size:0.8rem; letter-spacing:0.15em; margin-bottom:1rem; }
+.mission h2 { font-size:2rem; font-weight:800; margin-bottom:1rem; line-height:1.2; }
+.mission p { color:var(--t2); font-size:1.05rem; line-height:1.6; margin-bottom:1.25rem; }
+.mission .tags { display:flex; gap:0.5rem; flex-wrap:wrap; }
+.mission .tag { background:var(--bg); border:1px solid var(--border); border-radius:20px; padding:0.3rem 0.85rem; font-size:0.8rem; color:var(--t2); font-family:'IBM Plex Mono',monospace; }
+
+/* Quote / one-line */
+.oneline { text-align:center; }
+.oneline .pre { font-family:'IBM Plex Mono',monospace; color:var(--t3); font-size:0.8rem; letter-spacing:0.2em; margin-bottom:2rem; }
+.oneline h2 { font-size:clamp(2rem, 4vw, 3rem); font-weight:300; line-height:1.3; max-width:900px; margin:0 auto; }
+.oneline h2 strong { color:var(--accent); font-weight:700; }
+
+/* Format table */
+.fmt-table { width:100%; border-collapse:collapse; }
+.fmt-table th, .fmt-table td { padding:0.85rem 1rem; text-align:left; border-bottom:1px solid var(--border); font-size:0.95rem; }
+.fmt-table th { font-family:'IBM Plex Mono',monospace; font-size:0.75rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+.fmt-table td.fmt { font-family:'IBM Plex Mono',monospace; color:var(--cyan); font-weight:500; }
+.fmt-table td.use { color:var(--t2); }
+
+/* Color palette swatches */
+.palette { display:grid; grid-template-columns:repeat(4,1fr); gap:0.75rem; max-width:600px; }
+.palette .sw { aspect-ratio:1; border-radius:8px; display:flex; align-items:flex-end; padding:0.5rem; font-family:'IBM Plex Mono',monospace; font-size:0.7rem; }
+
+/* Layout grid for patchwork */
+.pw-grid { display:grid; grid-template-columns:1fr 1fr; grid-template-rows:auto auto; gap:1rem; max-width:550px; margin:1rem auto 0; }
+.pw-cell { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:1rem; text-align:center; }
+.pw-cell.tall { grid-row:span 2; display:flex; align-items:center; justify-content:center; }
+.pw-cell .ltr { font-family:'IBM Plex Mono',monospace; font-size:1.5rem; color:var(--accent); font-weight:700; }
+.pw-cell .desc { font-size:0.75rem; color:var(--t2); margin-top:0.4rem; }
+
+</style>
+</head>
+<body>
+
+<div class="deck">
+
+<div class="top">
+  <div class="top-label">Week 10 · part II · <span>Publication-Ready Plots</span></div>
+  <div class="top-label"><span id="cur">01</span> / <span id="tot">28</span></div>
+  <div class="ptrack"><div class="pfill" id="pfill"></div></div>
+</div>
+
+<div class="area" id="area">
+
+<!-- 1: Cover -->
+<div class="s active">
+  <div class="cover">
+    <div class="pre">R for Clinical Research · Week 10 · Part II</div>
+    <h1>From <span class="accent">"OK"</span><br>to <span class="accent">Nature Style</span></h1>
+    <div class="sub">Publication-ready plots in R — a practical guide</div>
+    <div class="meta">
+      <span>Duration<strong>120 min</strong></span>
+      <span>Tools<strong>ggplot2 · ggpubr · patchwork</strong></span>
+      <span>Goal<strong>One PDF dashboard</strong></span>
+    </div>
+  </div>
+</div>
+
+<!-- 2: Why this matters -->
+<div class="s">
+  <div class="kicker">Why this lecture exists</div>
+  <h2 class="q">Your figure is the <span style="color:var(--accent)">first thing</span> a reviewer sees,<br>and often the <span style="color:var(--rose)">only thing</span> they remember.</h2>
+</div>
+
+<!-- 3: Agenda -->
+<div class="s">
+  <div class="kicker">Agenda · 4 parts</div>
+  <ul class="minimal" style="max-width:800px;">
+    <li><span class="num">01</span><div><strong>The publication standard</strong><span class="label"> — what makes a plot "Nature-ready" · 25 min</span></div></li>
+    <li><span class="num">02</span><div><strong>Advanced toolbox in R</strong><span class="label"> — theme, ggpubr, patchwork · 35 min</span></div></li>
+    <li><span class="num">03</span><div><strong>Practical project</strong><span class="label"> — build a scientific dashboard · 50 min</span></div></li>
+    <li><span class="num">04</span><div><strong>Peer review checklist</strong><span class="label"> — final QA before submission · 10 min</span></div></li>
+  </ul>
+</div>
+
+<!-- 4: Section divider 01 -->
+<div class="s">
+  <div class="divider">
+    <div class="num">PART 01</div>
+    <h1>The Publication<br>Standard</h1>
+    <div class="desc">What separates a default ggplot from a figure that ships in a journal.</div>
+    <div class="duration">25 minutes</div>
+  </div>
+</div>
+
+<!-- 5: Default vs polished comparison -->
+<div class="s">
+  <div class="kicker">Side by side</div>
+  <h1 class="big" style="font-size:2.4rem; margin-bottom:1.5rem;">Same data. Two worlds.</h1>
+  <div class="compare">
+    <div class="panel bad">
+      <h3>Default ggplot()</h3>
+      <svg viewBox="0 0 280 180" xmlns="http://www.w3.org/2000/svg">
+        <rect x="0" y="0" width="280" height="180" fill="#e5e5e5"/>
+        <g stroke="#ffffff" stroke-width="0.8">
+          <line x1="40" y1="20" x2="40" y2="155"/>
+          <line x1="40" y1="155" x2="265" y2="155"/>
+          <line x1="40" y1="50" x2="265" y2="50"/>
+          <line x1="40" y1="80" x2="265" y2="80"/>
+          <line x1="40" y1="110" x2="265" y2="110"/>
+          <line x1="40" y1="125" x2="265" y2="125"/>
+          <line x1="100" y1="20" x2="100" y2="155"/>
+          <line x1="160" y1="20" x2="160" y2="155"/>
+          <line x1="220" y1="20" x2="220" y2="155"/>
+        </g>
+        <rect x="55" y="105" width="25" height="50" fill="#f8766d"/>
+        <rect x="115" y="80" width="25" height="75" fill="#7cae00"/>
+        <rect x="175" y="60" width="25" height="95" fill="#00bfc4"/>
+        <rect x="235" y="95" width="25" height="60" fill="#c77cff"/>
+        <text x="20" y="160" fill="#888" font-size="8" font-family="sans-serif">factor(x)</text>
+        <text x="3" y="90" fill="#888" font-size="8" font-family="sans-serif" transform="rotate(-90, 8, 90)">value</text>
+      </svg>
+      <div class="label">Gray panel · multiple colors · gridlines everywhere</div>
+    </div>
+    <div class="panel good">
+      <h3>Publication ready</h3>
+      <svg viewBox="0 0 280 180" xmlns="http://www.w3.org/2000/svg">
+        <rect x="0" y="0" width="280" height="180" fill="white"/>
+        <line x1="40" y1="20" x2="40" y2="155" stroke="#222" stroke-width="1"/>
+        <line x1="40" y1="155" x2="265" y2="155" stroke="#222" stroke-width="1"/>
+        <line x1="36" y1="155" x2="40" y2="155" stroke="#222" stroke-width="1"/>
+        <line x1="36" y1="115" x2="40" y2="115" stroke="#222" stroke-width="1"/>
+        <line x1="36" y1="75" x2="40" y2="75" stroke="#222" stroke-width="1"/>
+        <line x1="36" y1="35" x2="40" y2="35" stroke="#222" stroke-width="1"/>
+        <rect x="55" y="105" width="25" height="50" fill="#2c3e50"/>
+        <rect x="115" y="80" width="25" height="75" fill="#2c3e50"/>
+        <rect x="175" y="60" width="25" height="95" fill="#2c3e50"/>
+        <rect x="235" y="95" width="25" height="60" fill="#2c3e50"/>
+        <text x="62" y="170" fill="#222" font-size="7" font-family="Helvetica">A</text>
+        <text x="122" y="170" fill="#222" font-size="7" font-family="Helvetica">B</text>
+        <text x="182" y="170" fill="#222" font-size="7" font-family="Helvetica">C</text>
+        <text x="242" y="170" fill="#222" font-size="7" font-family="Helvetica">D</text>
+        <text x="20" y="158" fill="#222" font-size="7" font-family="Helvetica">0</text>
+        <text x="20" y="118" fill="#222" font-size="7" font-family="Helvetica">25</text>
+        <text x="20" y="78" fill="#222" font-size="7" font-family="Helvetica">50</text>
+        <text x="20" y="38" fill="#222" font-size="7" font-family="Helvetica">75</text>
+        <text x="8" y="100" fill="#222" font-size="8" font-family="Helvetica" transform="rotate(-90, 8, 100)">Glucose (mg/dL)</text>
+      </svg>
+      <div class="label">White panel · single color · meaningful axes · units</div>
+    </div>
+  </div>
+</div>
+
+<!-- 6: What changed -->
+<div class="s">
+  <div class="kicker">Four shifts that did the work</div>
+  <div class="three">
+    <div class="card">
+      <div class="icon">01 · TYPOGRAPHY</div>
+      <h4>One font, sized to read</h4>
+      <p>Helvetica or Arial, sized so axis labels survive at 80% page width.</p>
+    </div>
+    <div class="card">
+      <div class="icon">02 · CLEAN CHROME</div>
+      <h4>Less ink, more signal</h4>
+      <p>No gray panel. No gridlines that compete with the data.</p>
+    </div>
+    <div class="card">
+      <div class="icon">03 · RESOLUTION</div>
+      <h4>300 DPI vector when possible</h4>
+      <p>The figure must hold up when printed at column width.</p>
+    </div>
+    <div class="card" style="grid-column:span 3;">
+      <div class="icon">04 · EYE PATH</div>
+      <h4>Reader's eye lands where the story is</h4>
+      <p>Color used as emphasis, not decoration. The reader knows in two seconds what the figure is saying.</p>
+    </div>
+  </div>
+</div>
+
+<!-- 7: Technical requirements header -->
+<div class="s">
+  <div class="oneline">
+    <div class="pre">SECTION 02 · TECHNICAL REQUIREMENTS</div>
+    <h2>Journals have <strong>rules</strong>. The figure either passes the check, or it bounces back.</h2>
+  </div>
+</div>
+
+<!-- 8: Vector vs raster -->
+<div class="s">
+  <div class="kicker cyan">File formats</div>
+  <h1 class="big" style="font-size:2.4rem; margin-bottom:1.5rem;">Vector vs. Raster</h1>
+  <table class="fmt-table">
+    <thead>
+      <tr><th>Format</th><th>Type</th><th>Use it for</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="fmt">PDF</td><td>Vector</td><td class="use">Default submission. Scales to any size, no quality loss.</td></tr>
+      <tr><td class="fmt">SVG</td><td>Vector</td><td class="use">Web, slides, post-processing in Illustrator or Inkscape.</td></tr>
+      <tr><td class="fmt">PNG</td><td>Raster</td><td class="use">Plots that include photos or rendered images.</td></tr>
+      <tr><td class="fmt">TIFF</td><td>Raster</td><td class="use">Required by some journals (Cell, Nature) for final figures.</td></tr>
+      <tr><td class="fmt">JPEG</td><td>Raster</td><td class="use" style="color:var(--rose);">Never. Lossy compression smears thin lines and text.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- 9: 300 DPI rule -->
+<div class="s">
+  <div class="stat">
+    <div class="num">300</div>
+    <div class="label" style="font-size:1.4rem; color:var(--t1); margin-top:1.5rem;">Dots per inch.</div>
+    <div class="label" style="margin-top:0.75rem;">The minimum for any figure that gets printed. Below 300 DPI, edges blur and small text becomes unreadable on paper.</div>
+  </div>
+</div>
+
+<!-- 10: Physical size -->
+<div class="s">
+  <div class="kicker">Size before you save</div>
+  <h2 class="q" style="font-size:2rem; margin-bottom:2rem;">Plan the figure for the column it will live in.</h2>
+  <div class="three">
+    <div class="card">
+      <div class="icon">SINGLE COLUMN</div>
+      <h4>~3.5 in / 89 mm</h4>
+      <p>Default for most life-science journals. Plan text to remain readable here.</p>
+    </div>
+    <div class="card">
+      <div class="icon">DOUBLE COLUMN</div>
+      <h4>~7.0 in / 180 mm</h4>
+      <p>Wide figures, multi-panel composites, dashboards.</p>
+    </div>
+    <div class="card">
+      <div class="icon">FULL PAGE</div>
+      <h4>~7.0 × 9.5 in</h4>
+      <p>For complex multi-panel figures. Used sparingly.</p>
+    </div>
+  </div>
+</div>
+
+<!-- 11: Anatomy of a figure -->
+<div class="s">
+  <div class="kicker violet">Anatomy of a scientific figure</div>
+  <div class="two-col">
+    <div>
+      <svg viewBox="0 0 320 240" xmlns="http://www.w3.org/2000/svg" class="anatomy-svg">
+        <!-- panel -->
+        <rect x="40" y="30" width="240" height="170" fill="#0d1422" stroke="#1e293b"/>
+        <!-- axes -->
+        <line x1="60" y1="50" x2="60" y2="180" stroke="#94a3b8" stroke-width="1"/>
+        <line x1="60" y1="180" x2="270" y2="180" stroke="#94a3b8" stroke-width="1"/>
+        <!-- bars -->
+        <rect x="80" y="120" width="30" height="60" fill="#34d399"/>
+        <rect x="130" y="90" width="30" height="90" fill="#34d399"/>
+        <rect x="180" y="70" width="30" height="110" fill="#34d399"/>
+        <rect x="230" y="105" width="30" height="75" fill="#34d399"/>
+        <!-- title -->
+        <text x="160" y="22" fill="#f1f5f9" font-size="11" font-family="Helvetica" font-weight="700" text-anchor="middle">Glucose by Group</text>
+        <!-- y axis label -->
+        <text x="20" y="118" fill="#94a3b8" font-size="8" font-family="Helvetica" transform="rotate(-90, 20, 118)">Glucose (mg/dL)</text>
+        <!-- x labels -->
+        <text x="95" y="195" fill="#94a3b8" font-size="8" text-anchor="middle" font-family="Helvetica">A</text>
+        <text x="145" y="195" fill="#94a3b8" font-size="8" text-anchor="middle" font-family="Helvetica">B</text>
+        <text x="195" y="195" fill="#94a3b8" font-size="8" text-anchor="middle" font-family="Helvetica">C</text>
+        <text x="245" y="195" fill="#94a3b8" font-size="8" text-anchor="middle" font-family="Helvetica">D</text>
+        <!-- y values -->
+        <text x="55" y="183" fill="#94a3b8" font-size="7" text-anchor="end" font-family="Helvetica">0</text>
+        <text x="55" y="143" fill="#94a3b8" font-size="7" text-anchor="end" font-family="Helvetica">50</text>
+        <text x="55" y="103" fill="#94a3b8" font-size="7" text-anchor="end" font-family="Helvetica">100</text>
+        <text x="55" y="63" fill="#94a3b8" font-size="7" text-anchor="end" font-family="Helvetica">150</text>
+        <!-- annotation lines -->
+        <line x1="160" y1="22" x2="305" y2="22" stroke="#fbbf24" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <text x="308" y="25" fill="#fbbf24" font-size="8" font-family="IBM Plex Mono">Title</text>
+        <line x1="20" y1="118" x2="0" y2="118" stroke="#fbbf24" stroke-width="0.5" stroke-dasharray="2,2" />
+        <line x1="195" y1="195" x2="195" y2="225" stroke="#fbbf24" stroke-width="0.5" stroke-dasharray="2,2"/>
+        <text x="195" y="235" fill="#fbbf24" font-size="8" text-anchor="middle" font-family="IBM Plex Mono">Axis label + units</text>
+      </svg>
+    </div>
+    <div>
+      <ul class="minimal">
+        <li><span class="num">01</span><div><strong>Title</strong><span class="label"> sentence case, descriptive</span></div></li>
+        <li><span class="num">02</span><div><strong>Axis labels</strong><span class="label"> always with units in parentheses</span></div></li>
+        <li><span class="num">03</span><div><strong>Tick marks</strong><span class="label"> readable, not crowded</span></div></li>
+        <li><span class="num">04</span><div><strong>Legend</strong><span class="label"> inside the panel when there's room</span></div></li>
+        <li><span class="num">05</span><div><strong>Color</strong><span class="label"> functional, colorblind-safe</span></div></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 12: Labels rules -->
+<div class="s">
+  <div class="kicker">Labels — small detail, big credibility</div>
+  <div class="two-col">
+    <div>
+      <h2 class="q" style="font-size:1.8rem; margin-bottom:1.5rem;">Units belong in parentheses.</h2>
+      <p class="lead" style="font-size:1.05rem;">Sentence case for axis titles. The unit comes in parentheses, separated by a space.</p>
+    </div>
+    <div>
+      <div class="code mono">
+<span class="c-com"># Wrong</span>
+<span class="c-fn">labs</span>(y = <span class="c-str">"GLUCOSE"</span>)
+<span class="c-fn">labs</span>(y = <span class="c-str">"glucose mg/dl"</span>)
+
+<span class="c-com"># Right</span>
+<span class="c-fn">labs</span>(y = <span class="c-str">"Glucose (mg/dL)"</span>)
+<span class="c-fn">labs</span>(y = <span class="c-str">"BMI (kg/m²)"</span>)
+<span class="c-fn">labs</span>(y = <span class="c-str">"Age (years)"</span>)
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 13: Legend placement -->
+<div class="s">
+  <div class="kicker">Legend</div>
+  <h2 class="q" style="font-size:2rem; margin-bottom:2rem;">Put the legend <span style="color:var(--accent)">inside</span> the plot when there's room.</h2>
+  <p class="lead">A legend outside the panel steals horizontal space — and that space is exactly what your data needs to breathe. If empty area exists in a corner, the legend goes there.</p>
+  <div class="code mono" style="margin-top:1.5rem; max-width:700px;">
+<span class="c-fn">theme</span>(legend.position = <span class="c-fn">c</span>(<span class="c-num">0.85</span>, <span class="c-num">0.85</span>),
+      legend.background = <span class="c-fn">element_rect</span>(fill = <span class="c-str">"white"</span>))
+  </div>
+</div>
+
+<!-- 14: Accessibility / colorblind -->
+<div class="s">
+  <div class="kicker rose">Accessibility</div>
+  <h2 class="q" style="font-size:2rem; margin-bottom:1.5rem;">~8% of men can't distinguish<br>red from green.</h2>
+  <p class="lead" style="margin-bottom:2rem;">Use palettes that survive both colorblind viewers and black-and-white printing.</p>
+  <div class="two-col narrow-right">
+    <div class="code mono">
+<span class="c-com"># Built-in safe palettes</span>
+<span class="c-fn">scale_color_viridis_d</span>()
+<span class="c-fn">scale_fill_brewer</span>(palette = <span class="c-str">"Set2"</span>)
+
+<span class="c-com"># From the rcartocolor package</span>
+<span class="c-fn">library</span>(rcartocolor)
+<span class="c-fn">scale_color_carto_d</span>(palette = <span class="c-str">"Safe"</span>)
+    </div>
+    <div>
+      <div class="palette">
+        <div class="sw" style="background:#440154; color:white;">#440154</div>
+        <div class="sw" style="background:#3b528b; color:white;">#3b528b</div>
+        <div class="sw" style="background:#21918c; color:white;">#21918c</div>
+        <div class="sw" style="background:#5ec962; color:#0a0e17;">#5ec962</div>
+        <div class="sw" style="background:#fde725; color:#0a0e17;">#fde725</div>
+        <div class="sw" style="background:#888; color:white;">grey</div>
+        <div class="sw" style="background:#000; color:white; border:1px solid #333;">black</div>
+        <div class="sw" style="background:#fff; color:#0a0e17;">white</div>
+      </div>
+      <p class="small" style="margin-top:0.75rem; text-align:center;">viridis · works in B&amp;W</p>
+    </div>
+  </div>
+</div>
+
+<!-- 15: Section divider 02 -->
+<div class="s">
+  <div class="divider">
+    <div class="num">PART 02</div>
+    <h1>Advanced<br>R Toolbox</h1>
+    <div class="desc">theme(), ggpubr, patchwork — the three layers that turn ggplot into journal output.</div>
+    <div class="duration">35 minutes</div>
+  </div>
+</div>
+
+<!-- 16: theme() mastery intro -->
+<div class="s">
+  <div class="oneline">
+    <div class="pre">THEME()</div>
+    <h2>Every detail you don't like in a default plot lives <strong>inside theme()</strong>.</h2>
+  </div>
+</div>
+
+<!-- 17: theme() four elements -->
+<div class="s">
+  <div class="kicker">Four arguments do most of the work</div>
+  <div class="code mono" style="font-size:0.95rem;">
+my_theme &lt;- <span class="c-fn">theme_minimal</span>(base_size = <span class="c-num">12</span>) +
+  <span class="c-fn">theme</span>(
+    <span class="c-arg">axis.line</span>      = <span class="c-fn">element_line</span>(color = <span class="c-str">"black"</span>, linewidth = <span class="c-num">0.4</span>),  <span class="c-com"># clean axes</span>
+    <span class="c-arg">panel.grid</span>     = <span class="c-fn">element_blank</span>(),                                  <span class="c-com"># kill the grid</span>
+    <span class="c-arg">text</span>           = <span class="c-fn">element_text</span>(family = <span class="c-str">"Helvetica"</span>),               <span class="c-com"># one font everywhere</span>
+    <span class="c-arg">strip.background</span> = <span class="c-fn">element_rect</span>(fill = <span class="c-str">"grey90"</span>, color = <span class="c-key">NA</span>) <span class="c-com"># facet headers</span>
+  )
+  </div>
+  <p class="lead" style="font-size:1rem; margin-top:1.5rem;">Save it once, reuse it on every figure in the paper.</p>
+</div>
+
+<!-- 18: ggpubr stat_compare_means -->
+<div class="s">
+  <div class="kicker amber">Statistical annotations</div>
+  <h2 class="q" style="font-size:1.8rem; margin-bottom:1.5rem;">Significance stars without the spreadsheet.</h2>
+  <div class="two-col narrow-right">
+    <div class="code mono">
+<span class="c-fn">library</span>(ggpubr)
+
+<span class="c-fn">ggboxplot</span>(df, x = <span class="c-str">"diabetes"</span>, y = <span class="c-str">"glucose"</span>,
+          fill = <span class="c-str">"diabetes"</span>) +
+  <span class="c-fn">stat_compare_means</span>(
+    method = <span class="c-str">"wilcox.test"</span>,
+    label = <span class="c-str">"p.signif"</span>
+  )
+    </div>
+    <div>
+      <p class="small" style="margin-bottom:0.75rem; color:var(--t1);"><strong>Adds:</strong></p>
+      <ul class="minimal" style="font-size:0.95rem;">
+        <li><span class="num" style="color:var(--amber);">★</span><div>p-value or significance stars</div></li>
+        <li><span class="num" style="color:var(--amber);">★</span><div>bracket lines between groups</div></li>
+        <li><span class="num" style="color:var(--amber);">★</span><div>your choice of test</div></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- 19: patchwork intro -->
+<div class="s">
+  <div class="kicker violet">Multi-panel figures</div>
+  <h1 class="big" style="font-size:2.4rem; margin-bottom:1rem;">patchwork — combine plots with <span class="mono" style="color:var(--accent);">+</span> and <span class="mono" style="color:var(--accent);">/</span></h1>
+  <p class="lead" style="margin-bottom:1.5rem;">No more grid.arrange gymnastics. Three operators is all you need.</p>
+  <div class="two-col">
+    <div class="code mono">
+<span class="c-fn">library</span>(patchwork)
+
+<span class="c-com"># Side by side</span>
+p1 + p2
+
+<span class="c-com"># Stacked</span>
+p1 / p2
+
+<span class="c-com"># A on top, B and C below</span>
+p1 / (p2 + p3)
+    </div>
+    <div class="pw-grid">
+      <div class="pw-cell" style="grid-column:span 2;"><div class="ltr">A</div><div class="desc">histogram</div></div>
+      <div class="pw-cell"><div class="ltr">B</div><div class="desc">boxplot</div></div>
+      <div class="pw-cell"><div class="ltr">C</div><div class="desc">bar chart</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 20: patchwork annotation -->
+<div class="s">
+  <div class="kicker">One legend. One title. Auto-tags.</div>
+  <div class="code mono" style="max-width:850px;">
+(p1 / (p2 + p3)) +
+  <span class="c-fn">plot_annotation</span>(
+    title = <span class="c-str">"Figure 1. Glucose, BMI, and Outcome"</span>,
+    tag_levels = <span class="c-str">"A"</span>          <span class="c-com"># A, B, C labels added automatically</span>
+  ) +
+  <span class="c-fn">plot_layout</span>(guides = <span class="c-str">"collect"</span>) <span class="c-com"># merge identical legends</span>
+  </div>
+</div>
+
+<!-- 21: Section divider 03 -->
+<div class="s">
+  <div class="divider">
+    <div class="num">PART 03</div>
+    <h1>Practical<br>Project</h1>
+    <div class="desc">Build one PDF dashboard with three coordinated plots that tell a research story.</div>
+    <div class="duration">50 minutes</div>
+  </div>
+</div>
+
+<!-- 22: The Mission -->
+<div class="s">
+  <div class="mission">
+    <div class="label">THE MISSION</div>
+    <h2>Build a 3-panel dashboard that tells one story.</h2>
+    <p>Use the <span class="mono" style="color:var(--accent);">palmerpenguins</span> dataset. Output one PDF, three coordinated plots, all sharing the same color palette and theme. Every label complete, every axis with units, ready to drop into a manuscript.</p>
+    <div class="tags">
+      <span class="tag">palmerpenguins</span>
+      <span class="tag">ggplot2</span>
+      <span class="tag">ggpubr</span>
+      <span class="tag">patchwork</span>
+      <span class="tag">PDF · 300 DPI</span>
+    </div>
+  </div>
+</div>
+
+<!-- 23: Step 1 histogram -->
+<div class="s">
+  <div class="kicker cyan">STEP 01 · Distribution</div>
+  <h1 class="big" style="font-size:2.4rem; margin-bottom:1.5rem;">The histogram</h1>
+  <div class="two-col">
+    <div>
+      <p class="lead" style="margin-bottom:1rem;">Show the distribution of one continuous variable. Justify your binwidth. Overlay a density curve.</p>
+      <ul class="minimal">
+        <li><span class="num">·</span><div>justified <code class="mono" style="color:var(--accent);">binwidth</code></div></li>
+        <li><span class="num">·</span><div>density overlay</div></li>
+        <li><span class="num">·</span><div><code class="mono" style="color:var(--accent);">theme_pubr()</code></div></li>
+      </ul>
+    </div>
+    <div class="code mono" style="font-size:0.85rem;">
+<span class="c-fn">ggplot</span>(penguins, <span class="c-fn">aes</span>(x = flipper_length_mm)) +
+  <span class="c-fn">geom_histogram</span>(<span class="c-fn">aes</span>(y = <span class="c-fn">after_stat</span>(density)),
+                 binwidth = <span class="c-num">3</span>,
+                 fill = <span class="c-str">"#22d3ee"</span>, color = <span class="c-str">"white"</span>) +
+  <span class="c-fn">geom_density</span>(linewidth = <span class="c-num">0.8</span>) +
+  <span class="c-fn">labs</span>(x = <span class="c-str">"Flipper length (mm)"</span>,
+       y = <span class="c-str">"Density"</span>) +
+  <span class="c-fn">theme_pubr</span>()
+    </div>
+  </div>
+</div>
+
+<!-- 24: Step 2 boxplot -->
+<div class="s">
+  <div class="kicker amber">STEP 02 · Comparison</div>
+  <h1 class="big" style="font-size:2.4rem; margin-bottom:1.5rem;">The boxplot</h1>
+  <div class="two-col">
+    <div>
+      <p class="lead" style="margin-bottom:1rem;">Compare the same variable across groups. Show the raw points and the test result.</p>
+      <ul class="minimal">
+        <li><span class="num">·</span><div><code class="mono" style="color:var(--accent);">geom_jitter</code> with low alpha</div></li>
+        <li><span class="num">·</span><div>outliers hidden in box (shown by jitter)</div></li>
+        <li><span class="num">·</span><div><code class="mono" style="color:var(--accent);">stat_compare_means</code></div></li>
+      </ul>
+    </div>
+    <div class="code mono" style="font-size:0.85rem;">
+<span class="c-fn">ggplot</span>(penguins, <span class="c-fn">aes</span>(species, body_mass_g, fill = species)) +
+  <span class="c-fn">geom_boxplot</span>(alpha = <span class="c-num">0.5</span>, outlier.shape = <span class="c-key">NA</span>) +
+  <span class="c-fn">geom_jitter</span>(width = <span class="c-num">0.15</span>, alpha = <span class="c-num">0.4</span>, size = <span class="c-num">1</span>) +
+  <span class="c-fn">stat_compare_means</span>(method = <span class="c-str">"kruskal.test"</span>) +
+  <span class="c-fn">labs</span>(x = <span class="c-key">NULL</span>, y = <span class="c-str">"Body mass (g)"</span>) +
+  <span class="c-fn">theme_pubr</span>() + <span class="c-fn">theme</span>(legend.position = <span class="c-str">"none"</span>)
+    </div>
+  </div>
+</div>
+
+<!-- 25: Step 3 bar chart -->
+<div class="s">
+  <div class="kicker">STEP 03 · Summary</div>
+  <h1 class="big" style="font-size:2.4rem; margin-bottom:1.5rem;">The bar chart</h1>
+  <div class="two-col">
+    <div>
+      <p class="lead" style="margin-bottom:1rem;">Counts or means, ordered by value. Value labels above the bars. Drop the legend if the x-axis already names the groups.</p>
+      <ul class="minimal">
+        <li><span class="num">·</span><div><code class="mono" style="color:var(--accent);">fct_reorder</code> for ordering</div></li>
+        <li><span class="num">·</span><div><code class="mono" style="color:var(--accent);">geom_text</code> for value labels</div></li>
+        <li><span class="num">·</span><div>no redundant legend</div></li>
+      </ul>
+    </div>
+    <div class="code mono" style="font-size:0.85rem;">
+penguins |&gt;
+  <span class="c-fn">count</span>(species) |&gt;
+  <span class="c-fn">ggplot</span>(<span class="c-fn">aes</span>(<span class="c-fn">fct_reorder</span>(species, n), n, fill = species)) +
+  <span class="c-fn">geom_col</span>() +
+  <span class="c-fn">geom_text</span>(<span class="c-fn">aes</span>(label = n), vjust = <span class="c-num">-0.5</span>) +
+  <span class="c-fn">labs</span>(x = <span class="c-key">NULL</span>, y = <span class="c-str">"Number of birds"</span>) +
+  <span class="c-fn">theme_pubr</span>() + <span class="c-fn">theme</span>(legend.position = <span class="c-str">"none"</span>)
+    </div>
+  </div>
+</div>
+
+<!-- 26: Step 4 final assembly -->
+<div class="s">
+  <div class="kicker violet">STEP 04 · Final assembly</div>
+  <h1 class="big" style="font-size:2.4rem; margin-bottom:1.5rem;">Combine and export</h1>
+  <div class="code mono" style="font-size:0.9rem;">
+<span class="c-com"># Layout: histogram on top, boxplot and barchart below</span>
+final &lt;- p_hist / (p_box + p_bar) +
+  <span class="c-fn">plot_annotation</span>(tag_levels = <span class="c-str">"A"</span>) +
+  <span class="c-fn">plot_layout</span>(guides = <span class="c-str">"collect"</span>)
+
+<span class="c-com"># Save at exact print size, 300 DPI, vector PDF</span>
+<span class="c-fn">ggsave</span>(<span class="c-str">"figure_1.pdf"</span>,
+       plot   = final,
+       width  = <span class="c-num">7</span>,    <span class="c-com"># inches — double-column</span>
+       height = <span class="c-num">5</span>,
+       dpi    = <span class="c-num">300</span>,
+       device = <span class="c-fn">cairo_pdf</span>)
+  </div>
+</div>
+
+<!-- 27: Section divider 04 + checklist -->
+<div class="s">
+  <div class="kicker rose">PART 04 · Peer review checklist</div>
+  <h1 class="big" style="font-size:2rem; margin-bottom:1.5rem;">Final QA before submission</h1>
+  <div class="checklist">
+    <div class="item"><div class="box"></div><div class="text">Is every text element readable without zooming?<small>Open the PDF at 100%. If you squint, increase base_size.</small></div></div>
+    <div class="item"><div class="box"></div><div class="text">Does every axis have a label and units?<small>"Time" is wrong. "Time (hours)" is right.</small></div></div>
+    <div class="item"><div class="box"></div><div class="text">Are colors consistent across all three panels?<small>Same factor → same color, in every plot.</small></div></div>
+    <div class="item"><div class="box"></div><div class="text">Does the figure survive black-and-white printing?<small>Print one. Or convert to grayscale and look again.</small></div></div>
+    <div class="item"><div class="box"></div><div class="text">Are panel tags (A, B, C) present and consistent?<small>Reviewers will reference them in comments.</small></div></div>
+    <div class="item"><div class="box"></div><div class="text">Saved as PDF (or TIFF) at 300 DPI, exact size?<small>No screenshots. No JPEGs.</small></div></div>
+  </div>
+</div>
+
+<!-- 28: Closing / resources -->
+<div class="s">
+  <div class="oneline">
+    <div class="pre">CLOSING</div>
+    <h2>The figure is the <strong>argument</strong>.<br>Everything else is the footnote.</h2>
+    <div style="margin-top:3rem; display:flex; justify-content:center; gap:2rem; flex-wrap:wrap;">
+      <div style="text-align:left;">
+        <div class="kicker">Keep learning</div>
+        <ul class="minimal" style="font-size:0.95rem;">
+          <li><span class="num">→</span><div><strong>R Graph Gallery</strong><span class="label"> — r-graph-gallery.com</span></div></li>
+          <li><span class="num">→</span><div><strong>From Data to Viz</strong><span class="label"> — data-to-viz.com</span></div></li>
+          <li><span class="num">→</span><div><strong>ggplot2 book</strong><span class="label"> — ggplot2-book.org</span></div></li>
+          <li><span class="num">→</span><div><strong>Claus Wilke</strong><span class="label"> — clauswilke.com/dataviz</span></div></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<div class="bottom">
+  <div>← → arrow keys · Home / End</div>
+  <div class="nav">
+    <button id="prev">← Prev</button>
+    <button id="next">Next →</button>
+  </div>
+  <div>R for Clinical Research · Week 10 · Part II</div>
+</div>
+
+</div>
+
+<script>
+const slides = document.querySelectorAll('.s');
+const cur = document.getElementById('cur');
+const tot = document.getElementById('tot');
+const pfill = document.getElementById('pfill');
+const prev = document.getElementById('prev');
+const next = document.getElementById('next');
+let i = 0;
+tot.textContent = String(slides.length).padStart(2, '0');
+
+function go(n) {
+  i = Math.max(0, Math.min(slides.length - 1, n));
+  slides.forEach((s, k) => s.classList.toggle('active', k === i));
+  cur.textContent = String(i + 1).padStart(2, '0');
+  pfill.style.width = ((i + 1) / slides.length * 100) + '%';
+}
+
+prev.addEventListener('click', () => go(i - 1));
+next.addEventListener('click', () => go(i + 1));
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); go(i + 1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); go(i - 1); }
+  else if (e.key === 'Home') { go(0); }
+  else if (e.key === 'End') { go(slides.length - 1); }
+});
+
+go(0);
+</script>
+
+</body>
+</html>

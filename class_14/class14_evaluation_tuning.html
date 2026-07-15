@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Evaluating Models & Tuning Them — R for Clinicians</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1216; --panel:#161c23; --line:#2a3440;
+  --text:#e9eef4; --muted:#8fa0b0;
+  --green:#4ade80; --cyan:#38bdf8; --teal:#5eead4; --amber:#fbbf24; --red:#f87171;
+  --mono:'JetBrains Mono',monospace; --sans:'Heebo',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden}
+.deck{height:100vh;position:relative}
+.slide{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:6vh 8vw 10vh;overflow:hidden}
+.slide.active{display:flex}
+.eyebrow{font-family:var(--mono);font-size:1.6vh;letter-spacing:.3em;text-transform:uppercase;color:var(--teal);margin-bottom:3vh}
+h1{font-size:8vh;font-weight:900;line-height:1.08}
+.hl{color:var(--green)}
+.sub{font-size:2.6vh;color:var(--muted);font-weight:300;margin-top:2.5vh}
+.giant{font-size:26vh;font-weight:900;font-family:var(--mono);color:var(--green);line-height:1}
+.statement{font-size:6.5vh;font-weight:700;line-height:1.25;max-width:76vw}
+.caption{font-size:2.4vh;color:var(--muted);margin-top:3vh;font-weight:300}
+.caption b{color:var(--amber);font-weight:500}
+.formula{font-family:var(--mono);font-size:4.2vh;margin-bottom:3vh}
+.formula .g{color:var(--green)}.formula .r{color:var(--red)}
+.svgbox{width:min(78vw,140vh);max-height:60vh;display:flex;justify-content:center}
+svg{width:100%;height:auto;max-height:60vh}
+.code{background:#0b0e12;border:1px solid var(--line);border-radius:14px;padding:3.5vh 3vw;font-family:var(--mono);font-size:2.5vh;line-height:1.7;text-align:left;white-space:pre}
+.code .c{color:#5b6b7b}.code .f{color:var(--cyan)}.code .s{color:var(--green)}.code .n{color:var(--amber)}.code .k{color:var(--teal)}
+.footerline{font-family:var(--mono);font-size:2vh;color:var(--muted);margin-top:4vh;letter-spacing:.05em}
+.footerline b{color:var(--teal);font-weight:500}
+.progress{position:absolute;bottom:4.5vh;left:0;height:3px;background:linear-gradient(90deg,var(--teal),var(--green));transition:width .25s;z-index:5}
+.bar{position:absolute;bottom:0;left:0;right:0;height:4.5vh;display:flex;align-items:center;justify-content:space-between;padding:0 3vw;font-family:var(--mono);font-size:1.4vh;color:var(--muted);border-top:1px solid var(--line);background:var(--bg);z-index:5}
+.notes{position:absolute;left:0;right:0;bottom:4.5vh;background:rgba(11,14,18,.96);border-top:1px solid var(--teal);padding:1.6vh 3vw;font-size:2vh;color:var(--text);text-align:left;display:none;z-index:4}
+.notes b{color:var(--teal)}
+body.shownotes .notes{display:block}
+.qline{font-size:3vh;color:var(--amber);margin-top:3.5vh;font-weight:500}
+.cohort{font-family:var(--mono);font-size:2.2vh;color:var(--muted);margin-top:1.5vh}
+.cohort b{color:var(--text)}
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+<!-- 1 TITLE -->
+<section class="slide" data-note="Today = two skills: measure a model honestly, then improve it honestly.">
+  <div class="eyebrow">R for Clinicians</div>
+  <h1>Evaluating Models<br>& <span class="hl">Tuning Them</span></h1>
+  <p class="sub">Confusion matrices · ROC curves · hyperparameter tuning</p>
+</section>
+
+<!-- 2 HOOK -->
+<section class="slide" data-note="Pause here. A prediction model IS a diagnostic test — it makes a claim about a patient and can be wrong in two ways. Same scrutiny applies.">
+  <p class="statement">Would you order a lab test<br>with <span style="color:var(--red)">unknown sensitivity</span>?</p>
+</section>
+
+<!-- 3 AGENDA -->
+<section class="slide" data-note="You can't optimize what you can't measure — that's why evaluation comes first.">
+  <div class="eyebrow">Agenda · 2 hours</div>
+  <div class="svgbox" style="max-height:38vh"><svg viewBox="0 0 700 180">
+    <rect x="60" y="45" width="230" height="90" rx="14" fill="#161c23" stroke="#4ade80" stroke-width="2"/>
+    <text x="175" y="100" fill="#4ade80" font-family="Heebo" font-size="34" font-weight="700" text-anchor="middle">1 · Measure</text>
+    <rect x="410" y="45" width="230" height="90" rx="14" fill="#161c23" stroke="#38bdf8" stroke-width="2"/>
+    <text x="525" y="100" fill="#38bdf8" font-family="Heebo" font-size="34" font-weight="700" text-anchor="middle">2 · Tune</text>
+    <path d="M 300 90 L 398 90" stroke="#8fa0b0" stroke-width="3" marker-end="url(#a1)"/>
+    <defs><marker id="a1" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#8fa0b0"/></marker></defs>
+  </svg></div>
+</section>
+
+<!-- 4 SPLIT + COHORT -->
+<section class="slide" data-note="Model learns on train, is graded on test — the test set simulates tomorrow's patients, opened once. Overfitting = memorizing the homework. Introduce the cohort: these 100 patients are our lab bench for the whole lecture.">
+  <div class="eyebrow">Block 1 · Measure</div>
+  <div class="svgbox" style="max-height:28vh"><svg viewBox="0 0 700 140">
+    <rect x="20" y="30" width="455" height="80" rx="12" fill="rgba(74,222,128,.15)" stroke="#4ade80" stroke-width="2"/>
+    <rect x="485" y="30" width="195" height="80" rx="12" fill="rgba(56,189,248,.15)" stroke="#38bdf8" stroke-width="2"/>
+    <text x="247" y="80" fill="#4ade80" font-family="JetBrains Mono" font-size="26" text-anchor="middle">TRAIN · 70%</text>
+    <text x="582" y="80" fill="#38bdf8" font-family="JetBrains Mono" font-size="26" text-anchor="middle">TEST · 30%</text>
+  </svg></div>
+  <p class="caption" style="font-size:3vh;color:var(--text)">The test set is opened <b>once</b>.</p>
+  <p class="cohort">Ours: <b>100 patients</b> · <b style="color:var(--red)">10 diabetic</b> · <b style="color:var(--cyan)">90 healthy</b></p>
+</section>
+
+<!-- 5 90% -->
+<section class="slide" data-note="Pause. 'This is Model A's accuracy on those 100 patients. Impressive?' Let them sit with it.">
+  <div class="giant">90%</div>
+</section>
+
+<!-- 6 REVEAL -->
+<section class="slide" data-note="No jargon yet — plain words. 90 correct out of 100 sounds great; the 10 it got wrong are exactly the 10 patients who needed it. So what SHOULD we measure? Hold that question.">
+  <p class="statement">Model A predicts <span style="color:var(--cyan)">"healthy"</span><br>for <u>everyone</u>.</p>
+  <p class="qline" style="color:var(--red)">It missed all 10 sick patients.</p>
+</section>
+
+<!-- 7 MATRIX EMPTY -->
+<section class="slide" data-note="Every patient lands in exactly one cell. Ask the room: where do Model A's 100 patients go? Let them place the 10 and the 90 before advancing.">
+  <div class="eyebrow">The confusion matrix</div>
+  <p class="cohort" style="margin:0 0 2vh"><b style="color:var(--red)">10 sick</b> · <b style="color:var(--cyan)">90 healthy</b> — where do they land?</p>
+  <div class="svgbox"><svg viewBox="0 0 700 400">
+    <text x="430" y="30" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle" letter-spacing="3">ACTUAL</text>
+    <text x="290" y="70" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">+</text>
+    <text x="570" y="70" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">−</text>
+    <text x="55" y="240" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" transform="rotate(-90 55 240)" text-anchor="middle" letter-spacing="3">PREDICTED</text>
+    <text x="120" y="160" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">+</text>
+    <text x="120" y="320" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">−</text>
+    <rect x="155" y="90" width="270" height="140" rx="12" fill="#161c23" stroke="#2a3440" stroke-width="2"/>
+    <rect x="435" y="90" width="270" height="140" rx="12" fill="#161c23" stroke="#2a3440" stroke-width="2"/>
+    <rect x="155" y="250" width="270" height="140" rx="12" fill="#161c23" stroke="#2a3440" stroke-width="2"/>
+    <rect x="435" y="250" width="270" height="140" rx="12" fill="#161c23" stroke="#2a3440" stroke-width="2"/>
+    <text x="290" y="170" fill="#3a4654" font-family="JetBrains Mono" font-size="40" text-anchor="middle">?</text>
+    <text x="570" y="170" fill="#3a4654" font-family="JetBrains Mono" font-size="40" text-anchor="middle">?</text>
+    <text x="290" y="330" fill="#3a4654" font-family="JetBrains Mono" font-size="40" text-anchor="middle">?</text>
+    <text x="570" y="330" fill="#3a4654" font-family="JetBrains Mono" font-size="40" text-anchor="middle">?</text>
+  </svg></div>
+</section>
+
+<!-- 8 MATRIX MODEL A -->
+<section class="slide" data-note="Name the cells as you fill them: TP = correctly caught (0!), FP = false alarm (0), FN = missed patient (all 10), TN = correctly cleared (90). 90 on the green diagonal → 90% accuracy. The matrix shows what accuracy hides.">
+  <div class="eyebrow">Model A · "everyone's healthy"</div>
+  <div class="svgbox"><svg viewBox="0 0 700 400">
+    <text x="430" y="30" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle" letter-spacing="3">ACTUAL</text>
+    <text x="290" y="70" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">+</text>
+    <text x="570" y="70" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">−</text>
+    <text x="55" y="240" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" transform="rotate(-90 55 240)" text-anchor="middle" letter-spacing="3">PREDICTED</text>
+    <text x="120" y="160" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">+</text>
+    <text x="120" y="320" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">−</text>
+    <rect x="155" y="90" width="270" height="140" rx="12" fill="rgba(74,222,128,.14)" stroke="#4ade80" stroke-width="2"/>
+    <text x="290" y="150" fill="#4ade80" font-family="JetBrains Mono" font-size="42" font-weight="700" text-anchor="middle">0</text>
+    <text x="290" y="195" fill="#8fa0b0" font-family="Heebo" font-size="17" text-anchor="middle">TP · caught</text>
+    <rect x="435" y="90" width="270" height="140" rx="12" fill="rgba(248,113,113,.13)" stroke="#f87171" stroke-width="2"/>
+    <text x="570" y="150" fill="#f87171" font-family="JetBrains Mono" font-size="42" font-weight="700" text-anchor="middle">0</text>
+    <text x="570" y="195" fill="#8fa0b0" font-family="Heebo" font-size="17" text-anchor="middle">FP · false alarm</text>
+    <rect x="155" y="250" width="270" height="140" rx="12" fill="rgba(248,113,113,.13)" stroke="#f87171" stroke-width="3"/>
+    <text x="290" y="310" fill="#f87171" font-family="JetBrains Mono" font-size="42" font-weight="700" text-anchor="middle">10</text>
+    <text x="290" y="355" fill="#8fa0b0" font-family="Heebo" font-size="17" text-anchor="middle">FN · missed</text>
+    <rect x="435" y="250" width="270" height="140" rx="12" fill="rgba(74,222,128,.14)" stroke="#4ade80" stroke-width="2"/>
+    <text x="570" y="310" fill="#4ade80" font-family="JetBrains Mono" font-size="42" font-weight="700" text-anchor="middle">90</text>
+    <text x="570" y="355" fill="#8fa0b0" font-family="Heebo" font-size="17" text-anchor="middle">TN · cleared</text>
+  </svg></div>
+  <p class="caption" style="font-size:2.8vh;color:var(--text)">Accuracy: <b>90%</b></p>
+</section>
+
+<!-- 9 MATRIX MODEL B -->
+<section class="slide" data-note="Model B = the decision tree we built last lecture, at the default 0.5 cutoff. It catches 6 of 10, at the cost of 9 false alarms. Accuracy: (6+81)/100 = 87% — LOWER than Model A. Yet it's the only one worth anything. Accuracy is dead. Then discuss: which red cell hurts more? FN sends a sick patient home; FP sends a healthy one for more tests. Clinical context decides, not math.">
+  <div class="eyebrow">Model B · our decision tree · cutoff 0.5</div>
+  <div class="svgbox"><svg viewBox="0 0 700 400">
+    <text x="430" y="30" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle" letter-spacing="3">ACTUAL</text>
+    <text x="290" y="70" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">+</text>
+    <text x="570" y="70" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">−</text>
+    <text x="55" y="240" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" transform="rotate(-90 55 240)" text-anchor="middle" letter-spacing="3">PREDICTED</text>
+    <text x="120" y="160" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">+</text>
+    <text x="120" y="320" fill="#8fa0b0" font-family="JetBrains Mono" font-size="17" text-anchor="middle">−</text>
+    <rect x="155" y="90" width="270" height="140" rx="12" fill="rgba(74,222,128,.14)" stroke="#4ade80" stroke-width="2"/>
+    <text x="290" y="150" fill="#4ade80" font-family="JetBrains Mono" font-size="42" font-weight="700" text-anchor="middle">6</text>
+    <text x="290" y="195" fill="#8fa0b0" font-family="Heebo" font-size="17" text-anchor="middle">TP · caught</text>
+    <rect x="435" y="90" width="270" height="140" rx="12" fill="rgba(248,113,113,.13)" stroke="#f87171" stroke-width="2"/>
+    <text x="570" y="150" fill="#f87171" font-family="JetBrains Mono" font-size="42" font-weight="700" text-anchor="middle">9</text>
+    <text x="570" y="195" fill="#8fa0b0" font-family="Heebo" font-size="17" text-anchor="middle">FP · false alarm</text>
+    <rect x="155" y="250" width="270" height="140" rx="12" fill="rgba(248,113,113,.13)" stroke="#f87171" stroke-width="2"/>
+    <text x="290" y="310" fill="#f87171" font-family="JetBrains Mono" font-size="42" font-weight="700" text-anchor="middle">4</text>
+    <text x="290" y="355" fill="#8fa0b0" font-family="Heebo" font-size="17" text-anchor="middle">FN · missed</text>
+    <rect x="435" y="250" width="270" height="140" rx="12" fill="rgba(74,222,128,.14)" stroke="#4ade80" stroke-width="2"/>
+    <text x="570" y="310" fill="#4ade80" font-family="JetBrains Mono" font-size="42" font-weight="700" text-anchor="middle">81</text>
+    <text x="570" y="355" fill="#8fa0b0" font-family="Heebo" font-size="17" text-anchor="middle">TN · cleared</text>
+  </svg></div>
+  <p class="qline">Accuracy: 87% — <u>lower</u>. Which model do you want in your clinic?</p>
+</section>
+
+<!-- 10 SENSITIVITY -->
+<section class="slide" data-note="Naming what we already felt. Same concept as diagnostic tests; also called recall. Model A's sensitivity: 0/10 = 0% — that's the number slide 6 was screaming about.">
+  <div class="eyebrow">There's a word for "how many did we catch"</div>
+  <div class="formula">Sensitivity = <span class="g">TP</span> / (<span class="g">TP</span> + <span class="r">FN</span>)</div>
+  <p class="statement" style="font-size:4.5vh">Model B: <span class="hl">6 / 10 = 60%</span></p>
+  <p class="caption">Of the truly sick — how many did we catch?</p>
+</section>
+
+<!-- 11 SPECIFICITY -->
+<section class="slide" data-note="Always report as a pair with sensitivity. Verbal aside — PPV: when Model B says 'positive', it's right 6 of 15 times = 40%. Sounds bad; for screening it's fine. PPV/NPV depend on prevalence; formulas in the Rmd.">
+  <div class="eyebrow">And its twin</div>
+  <div class="formula">Specificity = <span class="g">TN</span> / (<span class="g">TN</span> + <span class="r">FP</span>)</div>
+  <p class="statement" style="font-size:4.5vh">Model B: <span style="color:var(--cyan)">81 / 90 = 90%</span></p>
+  <p class="caption">Of the truly healthy — how many did we clear?</p>
+</section>
+
+<!-- 12 THRESHOLD + #47 -->
+<section class="slide" data-note="Model B doesn't output 'sick/healthy' — it outputs a probability, and the cutoff line turns it into a decision. Patient #47 has diabetes. The model gives her 0.42. At the default 0.5 — she is sent home. She is one of the 4 FN in our matrix. 0.5 is a default, not a law.">
+  <div class="eyebrow">threshold</div>
+  <div class="svgbox"><svg viewBox="0 0 720 330">
+    <path d="M 60 280 C 130 280 150 110 220 110 C 290 110 310 280 380 280" fill="rgba(56,189,248,.15)" stroke="#38bdf8" stroke-width="3"/>
+    <path d="M 300 280 C 370 280 390 90 460 90 C 530 90 550 280 620 280" fill="rgba(248,113,113,.13)" stroke="#f87171" stroke-width="3"/>
+    <line x1="360" y1="40" x2="360" y2="290" stroke="#fbbf24" stroke-width="3.5" stroke-dasharray="9 7"/>
+    <text x="360" y="26" fill="#fbbf24" font-family="JetBrains Mono" font-size="20" text-anchor="middle">0.5</text>
+    <text x="185" y="95" fill="#38bdf8" font-family="Heebo" font-size="20" text-anchor="middle">healthy</text>
+    <text x="495" y="75" fill="#f87171" font-family="Heebo" font-size="20" text-anchor="middle">sick</text>
+    <circle cx="317" cy="280" r="10" fill="#f87171" stroke="#e9eef4" stroke-width="2"/>
+    <text x="317" y="315" fill="#e9eef4" font-family="JetBrains Mono" font-size="16" text-anchor="middle">#47 · p=0.42 · diabetic</text>
+    <line x1="40" y1="290" x2="680" y2="290" stroke="#2a3440" stroke-width="2"/>
+  </svg></div>
+  <p class="qline" style="color:var(--red)">Patient #47 is sent home.</p>
+</section>
+
+<!-- 13 MOVE THE LINE -->
+<section class="slide" data-note="Drop the cutoff to 0.3: #47 crosses the line — caught. Sensitivity 8/10 = 80%. The price: false alarms double, 9 → 18. Same model, two matrices, real faces. Leave the question open — answered in three slides.">
+  <div class="svgbox"><svg viewBox="0 0 720 330">
+    <path d="M 60 280 C 130 280 150 110 220 110 C 290 110 310 280 380 280" fill="rgba(56,189,248,.12)" stroke="#38bdf8" stroke-width="3"/>
+    <path d="M 300 280 C 370 280 390 90 460 90 C 530 90 550 280 620 280" fill="rgba(248,113,113,.10)" stroke="#f87171" stroke-width="3"/>
+    <line x1="278" y1="45" x2="278" y2="290" stroke="#4ade80" stroke-width="3.5" stroke-dasharray="9 7"/>
+    <text x="278" y="30" fill="#4ade80" font-family="JetBrains Mono" font-size="20" text-anchor="middle">0.3</text>
+    <circle cx="317" cy="280" r="10" fill="#4ade80" stroke="#e9eef4" stroke-width="2"/>
+    <text x="317" y="315" fill="#4ade80" font-family="JetBrains Mono" font-size="16" text-anchor="middle">#47 · caught</text>
+    <line x1="40" y1="290" x2="680" y2="290" stroke="#2a3440" stroke-width="2"/>
+  </svg></div>
+  <p class="cohort">TP <b style="color:var(--green)">8</b> · FP <b style="color:var(--red)">18</b> · FN <b style="color:var(--red)">2</b> · TN <b style="color:var(--green)">72</b></p>
+  <p class="qline">Same model. Different matrix. So — which line?</p>
+</section>
+
+<!-- 14 ROC -->
+<section class="slide" data-note="We just hand-built two points: cutoff 0.5 → (sens 60%, spec 90%); cutoff 0.3 → (80%, 80%). The curve is every other cutoff we didn't compute by hand. Diagonal = coin flip. Better models bulge top-left.">
+  <div class="eyebrow">ROC · every cutoff at once</div>
+  <div class="svgbox"><svg viewBox="0 0 660 400">
+    <line x1="80" y1="360" x2="620" y2="360" stroke="#2a3440" stroke-width="2"/>
+    <line x1="80" y1="360" x2="80" y2="30" stroke="#2a3440" stroke-width="2"/>
+    <line x1="80" y1="360" x2="620" y2="40" stroke="#5b6b7b" stroke-width="2" stroke-dasharray="7 7"/>
+    <text x="470" y="330" fill="#5b6b7b" font-family="Heebo" font-size="16" transform="rotate(-30 470 330)">coin flip</text>
+    <path d="M 80 360 C 95 260 108 200 134 168 C 158 138 172 116 188 104 C 260 55 460 42 620 40" fill="none" stroke="#4ade80" stroke-width="4"/>
+    <circle cx="134" cy="168" r="10" fill="#fbbf24"/>
+    <text x="158" y="178" fill="#fbbf24" font-family="JetBrains Mono" font-size="17">0.5</text>
+    <circle cx="188" cy="104" r="10" fill="#4ade80" stroke="#e9eef4" stroke-width="2"/>
+    <text x="212" y="110" fill="#4ade80" font-family="JetBrains Mono" font-size="17">0.3</text>
+    <text x="350" y="392" fill="#8fa0b0" font-family="JetBrains Mono" font-size="16" text-anchor="middle">1 − Specificity</text>
+    <text x="34" y="200" fill="#8fa0b0" font-family="JetBrains Mono" font-size="16" transform="rotate(-90 34 200)" text-anchor="middle">Sensitivity</text>
+    <text x="400" y="150" fill="#8fa0b0" font-family="Heebo" font-size="17">…and every cutoff in between</text>
+  </svg></div>
+</section>
+
+<!-- 15 AUC -->
+<section class="slide" data-note="AUC = Area Under the Curve. Threshold-free, prevalence-free — pure discrimination: can the model separate sick from healthy at all?">
+  <div class="eyebrow">AUC · Model B</div>
+  <div class="giant" style="font-size:18vh">0.81</div>
+  <p class="caption" style="font-size:2.8vh;color:var(--text)">The probability Model B ranks a <span style="color:var(--red)">sick</span> patient above a <span style="color:var(--cyan)">healthy</span> one.</p>
+</section>
+
+<!-- 16 AUC SCALE -->
+<section class="slide" data-note="Rule of thumb only — an AUC of 0.75 can be valuable or useless depending on the decision it supports. Above ~0.95: suspect leakage, not genius.">
+  <div class="eyebrow">Reading AUC</div>
+  <div class="svgbox" style="max-height:36vh"><svg viewBox="0 0 720 210">
+    <defs><linearGradient id="sc" x1="0" x2="1"><stop offset="0" stop-color="#f87171"/><stop offset=".5" stop-color="#fbbf24"/><stop offset="1" stop-color="#4ade80"/></linearGradient></defs>
+    <rect x="40" y="90" width="640" height="26" rx="13" fill="url(#sc)" opacity=".85"/>
+    <g font-family="JetBrains Mono" font-size="20" fill="#e9eef4" text-anchor="middle">
+      <text x="40" y="70">0.5</text><text x="296" y="70">0.7</text><text x="424" y="70">0.8</text><text x="552" y="70">0.9</text><text x="680" y="70">1.0</text>
+    </g>
+    <g font-family="Heebo" font-size="17" fill="#8fa0b0" text-anchor="middle">
+      <text x="40" y="150">coin flip</text><text x="360" y="150">acceptable</text><text x="488" y="150">good</text><text x="620" y="150">suspicious…</text>
+    </g>
+    <g stroke="#0f1216" stroke-width="3"><line x1="296" y1="86" x2="296" y2="120"/><line x1="424" y1="86" x2="424" y2="120"/><line x1="552" y1="86" x2="552" y2="120"/></g>
+    <path d="M 437 30 L 429 48 L 445 48 z" fill="#e9eef4"/>
+    <text x="437" y="22" fill="#e9eef4" font-family="JetBrains Mono" font-size="17" text-anchor="middle">0.81 · Model B</text>
+  </svg></div>
+</section>
+
+<!-- 17 WHICH THRESHOLD -->
+<section class="slide" data-note="Closes the open question. Youden's J = sens + spec − 1: the point farthest from the diagonal. On Model B's curve it lands near cutoff 0.35 — Patient #47 is caught. But Youden assumes FN and FP cost the same; in medicine they rarely do. Statistics proposes, the clinician disposes.">
+  <div class="eyebrow">So — which line?</div>
+  <div class="svgbox" style="max-height:50vh"><svg viewBox="0 0 660 380">
+    <line x1="80" y1="340" x2="620" y2="340" stroke="#2a3440" stroke-width="2"/>
+    <line x1="80" y1="340" x2="80" y2="30" stroke="#2a3440" stroke-width="2"/>
+    <line x1="80" y1="340" x2="620" y2="35" stroke="#5b6b7b" stroke-width="2" stroke-dasharray="7 7"/>
+    <path d="M 80 340 C 95 245 108 190 134 160 C 158 132 172 112 188 100 C 260 53 460 40 620 38" fill="none" stroke="#4ade80" stroke-width="4"/>
+    <circle cx="163" cy="128" r="11" fill="#fbbf24"/>
+    <line x1="163" y1="128" x2="300" y2="215" stroke="#fbbf24" stroke-width="2" stroke-dasharray="5 5"/>
+    <text x="310" y="222" fill="#fbbf24" font-family="Heebo" font-size="19">Youden's J → cutoff ≈ 0.35</text>
+    <text x="310" y="252" fill="#8fa0b0" font-family="Heebo" font-size="17">Patient #47: caught</text>
+  </svg></div>
+  <p class="caption">A <b>default</b> — not an answer. The clinic decides.</p>
+</section>
+
+<!-- 18 CODE MATRIX -->
+<section class="slide" data-note="This is how R computes what we just did by hand. Slide numbers are the simplified cohort — R will show the real Pima numbers, which are uglier. Warn: positive = 'pos', otherwise sensitivity and specificity may be swapped.">
+  <div class="eyebrow">R · caret</div>
+  <div class="code"><span class="f">pred</span> <- <span class="f">predict</span>(fit, test)
+
+<span class="f">confusionMatrix</span>(pred, test$diabetes,
+                positive = <span class="s">"pos"</span>)</div>
+  <p class="caption">Everything we did by hand — in one call.</p>
+</section>
+
+<!-- 19 CODE ROC -->
+<section class="slide" data-note="type = 'prob' is the key switch — ask for probabilities, not classes. Live demo: coords(roc_obj, 'best') returns the Youden cutoff, sensitivity, and specificity.">
+  <div class="eyebrow">R · pROC</div>
+  <div class="code">prob    <- <span class="f">predict</span>(fit, test, type = <span class="s">"prob"</span>)[, <span class="s">"pos"</span>]
+roc_obj <- <span class="f">roc</span>(test$diabetes, prob)
+
+<span class="f">auc</span>(roc_obj)
+<span class="f">plot</span>(roc_obj, print.auc = <span class="k">TRUE</span>)
+<span class="f">coords</span>(roc_obj, <span class="s">"best"</span>)   <span class="c"># Youden cutoff</span></div>
+  <p class="caption"><b>type = "prob"</b> — the whole trick.</p>
+</section>
+
+<!-- 20 CV -->
+<section class="slide" data-note="One split can be lucky or unlucky — maybe our 100 patients were an easy draw. CV: rotate the held-out fold, average the results. Every observation validated exactly once. This becomes the tuning engine after the break.">
+  <div class="eyebrow">5-fold cross-validation</div>
+  <div class="svgbox" style="max-height:46vh"><svg viewBox="0 0 700 310">
+    <g font-family="JetBrains Mono" font-size="14" fill="#8fa0b0">
+    <g><rect x="90" y="20" width="112" height="40" rx="6" fill="rgba(56,189,248,.3)" stroke="#38bdf8"/><rect x="206" y="20" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="322" y="20" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="438" y="20" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="554" y="20" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><text x="45" y="46">1</text></g>
+    <g><rect x="90" y="70" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="206" y="70" width="112" height="40" rx="6" fill="rgba(56,189,248,.3)" stroke="#38bdf8"/><rect x="322" y="70" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="438" y="70" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="554" y="70" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><text x="45" y="96">2</text></g>
+    <g><rect x="90" y="120" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="206" y="120" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="322" y="120" width="112" height="40" rx="6" fill="rgba(56,189,248,.3)" stroke="#38bdf8"/><rect x="438" y="120" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="554" y="120" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><text x="45" y="146">3</text></g>
+    <g><rect x="90" y="170" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="206" y="170" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="322" y="170" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="438" y="170" width="112" height="40" rx="6" fill="rgba(56,189,248,.3)" stroke="#38bdf8"/><rect x="554" y="170" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><text x="45" y="196">4</text></g>
+    <g><rect x="90" y="220" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="206" y="220" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="322" y="220" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="438" y="220" width="112" height="40" rx="6" fill="#161c23" stroke="#2a3440"/><rect x="554" y="220" width="112" height="40" rx="6" fill="rgba(56,189,248,.3)" stroke="#38bdf8"/><text x="45" y="246">5</text></g>
+    </g>
+    <text x="230" y="296" fill="#38bdf8" font-family="Heebo" font-size="17">■ validate</text>
+    <text x="420" y="296" fill="#8fa0b0" font-family="Heebo" font-size="17">■ train · then average</text>
+  </svg></div>
+  <p class="qline">Is 0.81 skill — or a lucky split?</p>
+</section>
+
+<!-- 21 CODE CV -->
+<section class="slide" data-note="metric = 'ROC' in train() means: optimize AUC. We just told the whole pipeline to stop optimizing accuracy — this hour, in one argument.">
+  <div class="eyebrow">R · caret</div>
+  <div class="code">ctrl <- <span class="f">trainControl</span>(method = <span class="s">"cv"</span>, number = <span class="n">10</span>,
+                     classProbs = <span class="k">TRUE</span>,
+                     summaryFunction = twoClassSummary)</div>
+  <p class="caption">Then in <b>train()</b>: metric = "ROC" — stop optimizing accuracy.</p>
+</section>
+
+<!-- 22 BRIDGE -->
+<section class="slide" data-note="End of Block 1. We have an honest yardstick and an honest number. After the break: the dials.">
+  <p class="statement">Model B: <span class="hl">AUC 0.81</span>.<br>Can we do better?</p>
+</section>
+
+<!-- 23 BREAK -->
+<section class="slide" data-note="">
+  <div class="eyebrow">Intermission</div>
+  <h1>Break <span class="hl">·</span> 10 min</h1>
+</section>
+
+<!-- 24 DISTINCTION -->
+<section class="slide" data-note="MRI analogy: the image the scanner reconstructs = parameters (learned from the patient). The scan protocol you chose beforehand = hyperparameters. Wrong protocol → poor image, regardless of patient.">
+  <div class="eyebrow">Block 2 · Tune</div>
+  <p class="statement">Parameters are <span style="color:var(--green)">learned</span>.<br>Hyperparameters are <span style="color:var(--cyan)">chosen</span>.</p>
+  <p class="footerline">tree → <b>cp</b> &nbsp;·&nbsp; kNN → <b>k</b> &nbsp;·&nbsp; forest → <b>mtry</b></p>
+</section>
+
+<!-- 25 U CURVE -->
+<section class="slide" data-note="Training error always falls as complexity grows — it rewards memorization. Validation error is U-shaped. Never tune on training error.">
+  <div class="eyebrow">Why tune</div>
+  <div class="svgbox" style="max-height:52vh"><svg viewBox="0 0 700 360">
+    <line x1="70" y1="310" x2="650" y2="310" stroke="#2a3440" stroke-width="2"/>
+    <line x1="70" y1="310" x2="70" y2="40" stroke="#2a3440" stroke-width="2"/>
+    <path d="M 90 100 C 200 220 340 265 630 290" fill="none" stroke="#38bdf8" stroke-width="3.5"/>
+    <path d="M 90 110 C 200 235 320 250 420 205 C 500 170 570 110 630 60" fill="none" stroke="#f87171" stroke-width="3.5"/>
+    <line x1="385" y1="60" x2="385" y2="300" stroke="#4ade80" stroke-width="2.5" stroke-dasharray="7 6"/>
+    <text x="385" y="45" fill="#4ade80" font-family="Heebo" font-size="19" text-anchor="middle" font-weight="700">sweet spot</text>
+    <text x="150" y="70" fill="#8fa0b0" font-family="Heebo" font-size="17">underfit</text>
+    <text x="600" y="105" fill="#f87171" font-family="Heebo" font-size="17" text-anchor="end">overfit</text>
+    <text x="560" y="272" fill="#38bdf8" font-family="Heebo" font-size="16">training error</text>
+    <text x="490" y="150" fill="#f87171" font-family="Heebo" font-size="16">validation error</text>
+    <text x="360" y="345" fill="#8fa0b0" font-family="JetBrains Mono" font-size="15" text-anchor="middle">complexity →</text>
+  </svg></div>
+  <p class="caption" style="font-size:2.8vh;color:var(--text)">Tuning = finding the sweet spot.</p>
+</section>
+
+<!-- 26 GRID -->
+<section class="slide" data-note="Brute force but honest: each dot is one model, cross-validated. Mention random search when there are many dials — often near-optimal, much faster.">
+  <div class="eyebrow">Grid search</div>
+  <div class="svgbox" style="max-height:44vh"><svg viewBox="0 0 480 320">
+    <g fill="#161c23" stroke="#2a3440" stroke-width="1.5">
+      <circle cx="110" cy="70" r="15"/><circle cx="190" cy="70" r="15"/><circle cx="270" cy="70" r="15"/><circle cx="350" cy="70" r="15"/>
+      <circle cx="110" cy="150" r="15"/><circle cx="190" cy="150" r="15"/><circle cx="350" cy="150" r="15"/>
+      <circle cx="110" cy="230" r="15"/><circle cx="190" cy="230" r="15"/><circle cx="270" cy="230" r="15"/><circle cx="350" cy="230" r="15"/>
+    </g>
+    <circle cx="270" cy="150" r="19" fill="rgba(74,222,128,.25)" stroke="#4ade80" stroke-width="3"/>
+    <text x="270" y="158" fill="#4ade80" font-family="JetBrains Mono" font-size="17" text-anchor="middle">★</text>
+    <text x="240" y="300" fill="#8fa0b0" font-family="JetBrains Mono" font-size="14" text-anchor="middle">x: cp · y: maxdepth</text>
+  </svg></div>
+  <p class="caption" style="font-size:2.8vh;color:var(--text)">Try every combination. Keep the <b>CV</b> winner.</p>
+</section>
+
+<!-- 27 CODE TUNE -->
+<section class="slide" data-note="tuneLength = 10 is the lazy version — caret picks candidates itself. Start lazy, refine later.">
+  <div class="eyebrow">R · caret</div>
+  <div class="code">grid <- <span class="f">expand.grid</span>(cp = <span class="f">seq</span>(<span class="n">0.001</span>, <span class="n">0.1</span>, <span class="n">0.005</span>))
+
+fit  <- <span class="f">train</span>(diabetes ~ ., data = train,
+              method    = <span class="s">"rpart"</span>,
+              trControl = ctrl,
+              metric    = <span class="s">"ROC"</span>,
+              tuneGrid  = grid)</div>
+</section>
+
+<!-- 28 TUNING CURVE -->
+<section class="slide" data-note="This is the U-curve in the wild — and the payoff: Model B's default cp gave 0.81; the tuned cp lifts CV AUC to 0.85. Point at the peak: fit$bestTune. Show live in RStudio if time allows.">
+  <div class="eyebrow">plot(fit)</div>
+  <div class="svgbox"><svg viewBox="0 0 700 360">
+    <line x1="70" y1="310" x2="650" y2="310" stroke="#2a3440" stroke-width="2"/>
+    <line x1="70" y1="310" x2="70" y2="40" stroke="#2a3440" stroke-width="2"/>
+    <path d="M 90 210 C 160 120 230 85 300 90 C 400 98 500 180 630 265" fill="none" stroke="#4ade80" stroke-width="3.5"/>
+    <g fill="#4ade80"><circle cx="90" cy="210" r="6"/><circle cx="170" cy="118" r="6"/><circle cx="240" cy="88" r="6"/><circle cx="300" cy="90" r="6"/><circle cx="380" cy="105" r="6"/><circle cx="460" cy="150" r="6"/><circle cx="540" cy="205" r="6"/><circle cx="630" cy="265" r="6"/></g>
+    <circle cx="270" cy="86" r="13" fill="none" stroke="#fbbf24" stroke-width="3"/>
+    <text x="270" y="55" fill="#fbbf24" font-family="JetBrains Mono" font-size="18" text-anchor="middle">bestTune · 0.85</text>
+    <circle cx="460" cy="150" r="13" fill="none" stroke="#8fa0b0" stroke-width="2.5"/>
+    <text x="505" y="140" fill="#8fa0b0" font-family="JetBrains Mono" font-size="16">default · 0.81</text>
+    <text x="360" y="345" fill="#8fa0b0" font-family="JetBrains Mono" font-size="15" text-anchor="middle">cp →</text>
+    <text x="36" y="180" fill="#8fa0b0" font-family="JetBrains Mono" font-size="15" transform="rotate(-90 36 180)" text-anchor="middle">AUC (CV)</text>
+  </svg></div>
+  <p class="caption" style="font-size:2.8vh;color:var(--text)">0.81 → <b style="color:var(--green)">0.85</b> — same data, better dial.</p>
+</section>
+
+<!-- 29 SWAP -->
+<section class="slide" data-note="The caret contract: one interface, 200+ model types. kNN needs preProcess = c('center','scale') — and caret re-estimates it inside each fold, the right way, automatically.">
+  <div class="eyebrow">The caret contract</div>
+  <p class="statement" style="font-size:4.8vh;margin-bottom:4vh">One interface. <span class="hl">Any model.</span></p>
+  <div class="code">method = <span class="s">"rpart"</span>   <span class="c"># decision tree  (cp)</span>
+method = <span class="s">"knn"</span>     <span class="c"># neighbors      (k)</span>
+method = <span class="s">"rf"</span>      <span class="c"># random forest  (mtry)</span></div>
+</section>
+
+<!-- 30 COMPARE -->
+<section class="slide" data-note="Same folds, same metric, paired differences — a fair fight. On our data the forest edges ahead. This answers 'which model?' honestly.">
+  <div class="eyebrow">R · caret</div>
+  <div class="code"><span class="f">summary</span>(<span class="f">resamples</span>(<span class="f">list</span>(tree = fit1,
+                        knn  = fit2,
+                        rf   = fit3)))
+
+<span class="c"># mean CV AUC</span>
+<span class="c">#   tree  0.85</span>
+<span class="c">#   knn   0.83</span>
+<span class="c">#   rf    <span style="color:#4ade80">0.86  ← winner</span></span></div>
+  <p class="caption">Same folds. Same metric. <b>Fair fight.</b></p>
+</section>
+
+<!-- 31 GOLDEN RULE -->
+<section class="slide" data-note="Everything so far — tuning, comparing — happened inside the training data via CV. Peeking at test results to pick a model = the test set silently becomes training data. Symptom: beautiful AUC in the paper, disappointment at deployment. Reviewers and regulators are learning to look for this.">
+  <p class="statement" style="font-size:7.5vh">Never tune on<br>the <span style="color:var(--red)">test set</span>.</p>
+</section>
+
+<!-- 32 LEAKAGE -->
+<section class="slide" data-note="Leakage = outside information sneaking into model building, inflating results. caret fixes only the first (preProcess inside CV). The other two require clinical knowledge of the data — that's your job, not the software's.">
+  <div class="eyebrow">Data leakage · cheating by accident</div>
+  <div style="display:flex;flex-direction:column;gap:3.5vh;font-size:3.4vh;font-weight:500">
+    <div>scaling <span style="color:var(--red)">before</span> splitting</div>
+    <div>"insulin prescribed" <span style="color:var(--muted)">→</span> predicting <span style="color:var(--red)">diabetes</span></div>
+    <div>same patient in <span style="color:var(--green)">train</span> <span style="color:var(--muted)">&</span> <span style="color:var(--cyan)">test</span></div>
+  </div>
+</section>
+
+<!-- 33 PIPELINE -->
+<section class="slide" data-note="If you remember one slide, this is it. Every published clinical prediction model should be able to draw this diagram of itself — with its own numbers.">
+  <div class="eyebrow">If you remember one slide</div>
+  <div class="svgbox" style="max-height:44vh"><svg viewBox="0 0 740 240">
+    <g font-family="JetBrains Mono" font-size="15" text-anchor="middle">
+      <rect x="10" y="60" width="105" height="70" rx="10" fill="#161c23" stroke="#5eead4"/>
+      <text x="62" y="100" fill="#5eead4">SPLIT</text>
+      <rect x="135" y="60" width="105" height="70" rx="10" fill="#161c23" stroke="#4ade80"/>
+      <text x="187" y="92" fill="#4ade80">CV +</text><text x="187" y="112" fill="#4ade80">TUNE</text>
+      <rect x="260" y="60" width="105" height="70" rx="10" fill="#161c23" stroke="#4ade80"/>
+      <text x="312" y="100" fill="#4ade80">COMPARE</text>
+      <rect x="385" y="60" width="105" height="70" rx="10" fill="#161c23" stroke="#38bdf8"/>
+      <text x="437" y="92" fill="#38bdf8">FINAL</text><text x="437" y="112" fill="#38bdf8">FIT</text>
+      <rect x="510" y="60" width="105" height="70" rx="10" fill="#161c23" stroke="#fbbf24"/>
+      <text x="562" y="92" fill="#fbbf24">TEST</text><text x="562" y="112" fill="#fbbf24">ONCE</text>
+      <rect x="635" y="60" width="100" height="70" rx="10" fill="#161c23" stroke="#e9eef4"/>
+      <text x="685" y="92" fill="#e9eef4">THRES-</text><text x="685" y="112" fill="#e9eef4">HOLD</text>
+      <g stroke="#5b6b7b" stroke-width="2.5">
+        <line x1="115" y1="95" x2="133" y2="95"/><line x1="240" y1="95" x2="258" y2="95"/><line x1="365" y1="95" x2="383" y2="95"/><line x1="490" y1="95" x2="508" y2="95"/><line x1="615" y1="95" x2="633" y2="95"/>
+      </g>
+      <g font-size="13" fill="#8fa0b0">
+        <text x="187" y="165">0.81 → 0.85</text>
+        <text x="562" y="165">TP 8 · FN 2</text>
+        <text x="562" y="185">FP 12 · TN 78</text>
+        <text x="685" y="165">0.35</text>
+        <text x="685" y="185">#47 caught</text>
+      </g>
+    </g>
+  </svg></div>
+</section>
+
+<!-- 34 CLOSE -->
+<section class="slide" data-note="Close the loop from slide 2. Next: the companion .Rmd walks this exact pipeline on the real Pima data — split, tune tree/kNN/forest, compare, grade once on test.">
+  <p class="statement" style="font-size:4.6vh;margin-bottom:5vh">Patient #47 was sent home by the defaults.<br><span class="hl">This lecture is why she wasn't.</span></p>
+  <h1 style="font-size:6vh">Questions?</h1>
+  <p class="sub">Next: the companion .Rmd — this pipeline, live.</p>
+</section>
+
+<div class="progress" id="prog"></div>
+<div class="notes" id="notes"></div>
+<div class="bar">
+  <span>R FOR CLINICIANS · EVALUATION & TUNING</span>
+  <span id="counter">1 / 34</span>
+  <span>← → NAVIGATE · N NOTES</span>
+</div>
+</div>
+
+<script>
+const slides=[...document.querySelectorAll('.slide')];
+let cur=0;
+function show(i){
+  cur=Math.max(0,Math.min(slides.length-1,i));
+  slides.forEach((s,j)=>s.classList.toggle('active',j===cur));
+  document.getElementById('prog').style.width=((cur+1)/slides.length*100)+'%';
+  document.getElementById('counter').textContent=(cur+1)+' / '+slides.length;
+  const n=slides[cur].dataset.note||'';
+  document.getElementById('notes').innerHTML=n?'<b>Note:</b> '+n:'';
+  location.hash=cur+1;
+}
+document.addEventListener('keydown',e=>{
+  if(['ArrowRight','PageDown',' '].includes(e.key)){e.preventDefault();show(cur+1);}
+  if(['ArrowLeft','PageUp'].includes(e.key)){e.preventDefault();show(cur-1);}
+  if(e.key==='Home')show(0);
+  if(e.key==='End')show(slides.length-1);
+  if(e.key==='n'||e.key==='N')document.body.classList.toggle('shownotes');
+});
+let tx=null;
+document.addEventListener('touchstart',e=>tx=e.touches[0].clientX);
+document.addEventListener('touchend',e=>{
+  if(tx===null)return;
+  const dx=e.changedTouches[0].clientX-tx;
+  if(dx<-50)show(cur+1); else if(dx>50)show(cur-1);
+  tx=null;
+});
+show(parseInt(location.hash.slice(1))-1||0);
+</script>
+</body>
+</html>
