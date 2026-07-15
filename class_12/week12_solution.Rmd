@@ -1,0 +1,235 @@
+---
+title: "Homework Solution — Publication-Ready Plots"
+subtitle: "Week 10 · Part II"
+author: "R for Clinical Research"
+date: "`r format(Sys.Date(), '%B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, message = FALSE, warning = FALSE,
+  fig.align = "center", fig.width = 7, fig.height = 4.5, dpi = 150
+)
+```
+
+```{r libraries}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(forcats)
+library(ggpubr)
+library(patchwork)
+library(mlbench)
+library(rcartocolor)
+
+data(PimaIndiansDiabetes2)
+```
+
+---
+
+## Q1 — Prepare the data
+
+```{r q1}
+n_start <- nrow(PimaIndiansDiabetes2)
+
+pima <- PimaIndiansDiabetes2 |>
+  drop_na(mass, glucose, age, diabetes) |>
+  mutate(
+    age_group = cut(
+      age,
+      breaks = c(20, 30, 40, 50, Inf),
+      labels = c("21-30", "31-40", "41-50", "51+"),
+      right  = TRUE
+    )
+  )
+
+n_dropped <- n_start - nrow(pima)
+n_dropped
+nrow(pima)
+
+count(pima, age_group)
+count(pima, age_group, diabetes)
+```
+
+`r n_dropped` rows dropped (mostly missing `mass`), `r nrow(pima)` remain.
+
+**Bias note:** the missingness is not random — a woman with no recorded BMI or
+glucose is likely to differ systematically from one who was fully measured
+(different clinic visit, different reason for testing). Dropping her removes a
+non-random slice of the cohort, so every prevalence in the figure is a
+prevalence *among the completely measured*, not among the cohort.
+
+---
+
+## Q2 — Your theme
+
+```{r q2}
+theme_hw <- function(base_size = 12) {
+  theme_classic(base_size = base_size) +
+    theme(
+      text            = element_text(family = "Helvetica", color = "grey20"),
+      axis.line       = element_line(color = "black", linewidth = 0.4),
+      axis.ticks      = element_line(color = "black", linewidth = 0.4),
+      panel.grid      = element_blank(),
+      plot.title      = element_text(face = "bold", size = base_size + 1),
+      plot.subtitle   = element_text(color = "grey40"),
+      legend.position = "bottom",
+      legend.title    = element_blank()
+    )
+}
+```
+
+---
+
+## Q3 — Panel A: distribution
+
+```{r q3, fig.height=3.5}
+p_hist <- ggplot(pima, aes(mass)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    binwidth  = 2,
+    fill      = "#94a3b8",
+    color     = "white",
+    linewidth = 0.2
+  ) +
+  geom_density(color = "#0f172a", linewidth = 0.6) +
+  labs(x = "BMI (kg/m²)", y = "Density") +
+  theme_hw()
+
+p_hist
+```
+
+**Binwidth justification:** BMI in this cohort spans roughly 18–67 kg/m²; a
+2 kg/m² bin gives ~25 bins — enough to show the right skew without turning the
+histogram into noise, and it is close to the clinical granularity people
+actually act on (BMI categories are 5-unit wide).
+
+---
+
+## Q4 — Panel B: BMI by age group and diabetes status
+
+```{r q4, fig.height=4}
+p_box <- ggplot(pima, aes(age_group, mass, fill = diabetes)) +
+  geom_boxplot(alpha = 0.5, outlier.shape = NA, width = 0.6) +
+  geom_point(
+    position = position_jitterdodge(jitter.width = 0.15, dodge.width = 0.6),
+    alpha = 0.3, size = 0.9, color = "grey30"
+  ) +
+  stat_compare_means(
+    aes(group = diabetes),
+    method = "wilcox.test",
+    label  = "p.signif",
+    size   = 3
+  ) +
+  scale_fill_carto_d(palette = "Safe") +
+  labs(x = "Age group (years)", y = "BMI (kg/m²)") +
+  theme_hw()
+
+p_box
+```
+
+---
+
+## Q5 — Panel C: prevalence
+
+```{r q5, fig.height=3.5}
+prev <- pima |>
+  group_by(age_group) |>
+  summarise(
+    n    = n(),
+    pos  = sum(diabetes == "pos"),
+    pct  = 100 * pos / n,
+    .groups = "drop"
+  )
+
+prev
+
+p_bar <- ggplot(prev, aes(age_group, pct, fill = age_group)) +
+  geom_col(width = 0.65) +
+  geom_text(aes(label = sprintf("%.1f%%", pct)),
+            vjust = -0.5, size = 3.2, family = "Helvetica") +
+  scale_fill_carto_d(palette = "Safe") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  labs(x = "Age group (years)", y = "Diabetes prevalence (%)") +
+  theme_hw() +
+  theme(legend.position = "none")
+
+p_bar
+```
+
+**Why not `fct_reorder`:** age group is an **ordinal** variable. Sorting by
+value would destroy the axis the reader needs in order to see the trend —
+the whole point of the panel is that prevalence rises with age and then
+drops back in the oldest group. Reorder only nominal categories.
+
+---
+
+## Q6 — Assemble and export
+
+```{r q6, fig.height=6.5, fig.width=8}
+final <- p_hist / (p_box + p_bar) +
+  plot_annotation(
+    title    = "Figure 1. BMI and diabetes prevalence across age groups in the Pima cohort",
+    subtitle = "(A) Distribution of BMI. (B) BMI by age group and diabetes status. (C) Diabetes prevalence by age group.",
+    tag_levels = "A",
+    theme = theme(
+      plot.title    = element_text(face = "bold", size = 13, family = "Helvetica"),
+      plot.subtitle = element_text(color = "grey40", size = 10, family = "Helvetica")
+    )
+  ) +
+  plot_layout(guides = "collect", heights = c(1, 1.2)) &
+  theme(legend.position = "bottom")
+
+final
+```
+
+```{r q6-save, eval=FALSE}
+ggsave(
+  filename = "figure_hw_pima.pdf",
+  plot     = final,
+  width    = 7,
+  height   = 6,
+  units    = "in",
+  dpi      = 300,
+  device   = cairo_pdf
+)
+```
+
+---
+
+## Q7 — Peer review
+
+Typical failures on first render, and the fix:
+
+| Failed item | Fix |
+|---|---|
+| Panel B legend duplicated / floating | `plot_layout(guides = "collect")` + `& theme(legend.position = "bottom")` |
+| Significance stars clipped at the top of B | `scale_y_continuous(expand = expansion(mult = c(0.05, 0.12)))` |
+| "51+" bar label cut off | Y expansion `mult = c(0, 0.15)` on Panel C |
+| Panels A and C use different greys for the same thing | They encode different variables — keep, but never reuse a colour across panels for different meanings |
+| Text unreadable at 100% | Drop to `theme_hw(base_size = 11)` rather than shrinking the figure |
+
+---
+
+# Grading rubric
+
+| Q | Points | Full credit requires |
+|---|---|---|
+| Q1 | 10 | correct `cut()` breaks/labels, counts reported, bias sentence names *non-random* missingness |
+| Q2 | 10 | a **function** with `base_size`, all six theme elements, reused everywhere |
+| Q3 | 15 | density scale (`after_stat(density)`) so the curve overlays correctly, binwidth justified, units on axes |
+| Q4 | 20 | `position_jitterdodge`, `aes(group = diabetes)` in the stat, colorblind-safe palette |
+| Q5 | 20 | percentage not count, age order preserved **and** justified, labels not clipped |
+| Q6 | 20 | `p_hist / (p_box + p_bar)`, tags, 300 DPI, `cairo_pdf` |
+| Q7 | 5 | at least two concrete failures with the fix applied |
+
+Common deductions: default `theme_grey()` sneaking into one panel; axis labels
+without units; `geom_jitter()` instead of `position_jitterdodge()` in Q4
+(points detach from their box); counts instead of percentages in Q5.

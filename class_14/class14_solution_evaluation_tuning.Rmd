@@ -1,0 +1,323 @@
+---
+title: "Walkthrough — Evaluating Models & Tuning Them"
+subtitle: "R for Clinicians · companion to the practice lab"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: darkly
+    highlight: zenburn
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 6, fig.height = 4.5)
+```
+
+# How to use this
+
+This is not an answer key to be marked against — nothing in the lab is
+submitted or graded. It's a worked walkthrough for when you're stuck, and a
+reference for the reasoning behind each step.
+
+Read one exercise at a time, after you've tried it. Your numbers may differ
+slightly from mine (different R version, different `rpart` build) — that's fine.
+What should match is the *shape* of the answer and the reasoning.
+
+## Packages
+
+`caret` calls modeling engines rather than bundling them, so the engines must
+be installed separately — this is the source of the
+`Required packages are missing: randomForest` error at Exercise 12.
+
+```{r install, eval=FALSE}
+install.packages(c("mlbench", "caret", "pROC", "rpart",
+                   "randomForest", "e1071", "kknn"))
+```
+
+# Data prep
+
+```{r data-prep}
+library(mlbench)
+library(caret)
+library(pROC)
+library(randomForest)   # engine for method = "rf"
+
+data(BreastCancer)
+bc <- BreastCancer
+
+bc$Id <- NULL
+bc[, 1:9] <- lapply(bc[, 1:9],
+                    function(x) as.numeric(as.character(x)))
+bc <- na.omit(bc)
+
+str(bc)
+table(bc$Class)
+```
+
+`malignant` is the positive class throughout — a false negative is a missed
+cancer.
+
+---
+
+# Part 1 · Split
+
+**1.**
+
+```{r ex1}
+set.seed(2026)
+idx   <- createDataPartition(bc$Class, p = 0.7, list = FALSE)
+train <- bc[idx, ]
+test  <- bc[-idx, ]
+
+nrow(test)
+table(test$Class)
+```
+
+`createDataPartition` splits **within each class**, so the benign/malignant
+ratio in train and test matches the full data (stratified split) — important
+when one class is rarer. You didn't have to ask for stratification; that's the
+function's default behaviour on a factor, and it's the reason we don't use
+`sample()` here.
+
+---
+
+# Part 2 · A first model and its confusion matrix
+
+**2.**
+
+```{r ex2}
+fit_tree <- train(Class ~ ., data = train, method = "rpart")
+
+pred <- predict(fit_tree, newdata = test)
+cm   <- confusionMatrix(pred, test$Class, positive = "malignant")
+cm
+```
+
+**3.** Reading the table (`cm$table`): the diagonal is correct, the
+off-diagonal is errors. In words: TP = malignant tumors correctly flagged;
+FN = malignant tumors called benign (missed cancers); FP = benign tumors
+called malignant (false alarms → unnecessary biopsy/anxiety); TN = benign
+tumors correctly cleared.
+
+**4.**
+
+```{r ex4}
+tab <- cm$table
+TP <- tab["malignant", "malignant"]
+FN <- tab["benign",    "malignant"]
+FP <- tab["malignant", "benign"]
+TN <- tab["benign",    "benign"]
+
+sensitivity_manual <- TP / (TP + FN)
+specificity_manual <- TN / (TN + FP)
+
+c(manual_sens = sensitivity_manual, caret_sens = cm$byClass["Sensitivity"])
+c(manual_spec = specificity_manual, caret_spec = cm$byClass["Specificity"])
+```
+
+They match — caret is just automating the arithmetic we did on the slides.
+
+**Check-yourself answer:** in `confusionMatrix(pred, truth)` the **rows are
+predictions** and the **columns are truth**. Swap them and sensitivity and
+specificity trade places — a mistake that survives peer review more often than
+it should.
+
+**5.** FN hurts more here: a missed malignancy delays treatment of a
+life-threatening disease, while an FP leads to a follow-up biopsy —
+distressing and costly, but recoverable. So we will prefer higher
+sensitivity, even at some cost to specificity. *(The metric you optimize is a
+clinical decision, not a statistical default.)*
+
+---
+
+# Part 3 · The accuracy trap
+
+**6.**
+
+```{r ex6}
+n_test        <- nrow(test)
+n_benign_test <- sum(test$Class == "benign")
+
+modelA_accuracy    <- n_benign_test / n_test   # predicting benign for all
+modelA_sensitivity <- 0                        # catches zero malignancies
+
+c(accuracy = modelA_accuracy, sensitivity = modelA_sensitivity)
+```
+
+Model A scores a high accuracy purely because benign tumors are the majority
+class — yet it catches **zero** cancers (sensitivity 0). Accuracy rewards the
+majority class and hides total failure on the cases that matter. *(This is
+slide 5–9 on your own data.)*
+
+---
+
+# Part 4 · Thresholds, ROC, AUC
+
+**7.**
+
+```{r ex7}
+prob    <- predict(fit_tree, newdata = test, type = "prob")[, "malignant"]
+roc_obj <- roc(response = test$Class, predictor = prob,
+               levels = c("benign", "malignant"))
+
+auc(roc_obj)
+plot(roc_obj, print.auc = TRUE, col = "#4ade80")
+```
+
+`type = "prob"` is the switch — the ROC curve is built by sweeping a
+threshold over these probabilities.
+
+**8.**
+
+```{r ex8}
+pred_02 <- factor(ifelse(prob > 0.2, "malignant", "benign"),
+                  levels = levels(test$Class))
+confusionMatrix(pred_02, test$Class, positive = "malignant")$byClass[
+  c("Sensitivity", "Specificity")]
+```
+
+Lowering the threshold catches more malignancies (**sensitivity ↑**) but
+flags more benign tumors as suspicious (**specificity ↓**) — the same
+trade-off Patient #47 illustrated on the slides, in the opposite direction.
+
+**Check-yourself answer:** state the price as patients, not percentages —
+"we now send *n* more women with benign tumors for a biopsy in order to catch
+*m* more cancers". That sentence is the one you'd have to defend in a
+tumor board; the percentage is the one that hides behind a decimal point.
+
+**9.**
+
+```{r ex9}
+coords(roc_obj, x = "best", best.method = "youden",
+       ret = c("threshold", "sensitivity", "specificity"))
+```
+
+Youden maximizes sensitivity + specificity − 1, treating a missed cancer and
+a false alarm as equally bad. In cancer screening they are **not** equal —
+we may deliberately choose a lower threshold than Youden to push sensitivity
+higher, accepting more false alarms to miss fewer cancers.
+
+---
+
+# Part 5 · Cross-validation and tuning
+
+**10.**
+
+```{r ex10}
+ctrl <- trainControl(method = "cv", number = 10,
+                     classProbs = TRUE,
+                     summaryFunction = twoClassSummary)
+
+grid_cp <- expand.grid(cp = seq(0.0, 0.05, by = 0.005))
+
+fit_tree_cv <- train(Class ~ ., data = train,
+                     method    = "rpart",
+                     trControl = ctrl,
+                     metric    = "ROC",
+                     tuneGrid  = grid_cp)
+
+fit_tree_cv$bestTune
+plot(fit_tree_cv)
+```
+
+`metric = "ROC"` optimizes AUC, not accuracy — the whole first hour, in one
+argument. It changes which row of `fit_tree_cv$results` gets returned as
+`bestTune`.
+
+**Check-yourself answer:** the tuning curve here may *not* show a clean U.
+That's not a bug — `BreastCancer` separates so easily that AUC is flat and high
+across most of the `cp` range. A flat curve is itself information: the
+hyperparameter doesn't matter much on this problem, so pick the simplest model
+in the flat region rather than the arithmetic maximum.
+
+**11.**
+
+```{r ex11}
+fit_knn <- train(Class ~ ., data = train,
+                 method     = "knn",
+                 preProcess = c("center", "scale"),
+                 trControl  = ctrl,
+                 metric     = "ROC",
+                 tuneGrid   = expand.grid(k = seq(3, 31, by = 2)))
+
+fit_knn$bestTune
+```
+
+The extra argument is `preProcess = c("center", "scale")`. kNN measures
+distances, so features on larger numeric scales would dominate. It matters
+that caret does this **inside each fold** — scaling on the whole dataset
+first would leak information from the validation fold into training (the
+preprocessing-leakage pitfall).
+
+**12.**
+
+```{r ex12}
+fit_rf <- train(Class ~ ., data = train,
+                method    = "rf",
+                trControl = ctrl,
+                metric    = "ROC",
+                tuneGrid  = expand.grid(mtry = 2:6))
+
+fit_rf$bestTune
+```
+
+**13.**
+
+```{r ex13}
+res <- resamples(list(tree = fit_tree_cv, knn = fit_knn, rf = fit_rf))
+summary(res)
+bwplot(res, metric = "ROC")
+```
+
+`resamples()` compares models on the **same folds**, so differences are
+paired and fair. Read the mean ROC row for the winner — but also look at the
+spread: if the boxplots overlap heavily, the "winner" may be within noise,
+and simpler/more interpretable models become a reasonable choice. *(On this
+dataset all three score very high AUC because BreastCancer is easy to
+separate — a good moment to note that a high number is not automatically
+impressive.)*
+
+---
+
+# Part 6 · Opening the test set
+
+**14.**
+
+```{r ex14}
+# pick the winner by mean CV AUC, programmatically
+cv_auc <- sapply(list(tree = fit_tree_cv, knn = fit_knn, rf = fit_rf),
+                 function(m) max(m$results$ROC))
+best_name  <- names(which.max(cv_auc))
+best_model <- list(tree = fit_tree_cv, knn = fit_knn, rf = fit_rf)[[best_name]]
+best_name
+
+# ---- test set opened ONCE ----
+final_pred <- predict(best_model, newdata = test)
+confusionMatrix(final_pred, test$Class, positive = "malignant")
+
+final_prob <- predict(best_model, newdata = test, type = "prob")[, "malignant"]
+final_roc  <- roc(test$Class, final_prob, levels = c("benign", "malignant"))
+auc(final_roc)                       # test AUC
+max(best_model$results$ROC)          # CV AUC, for comparison
+```
+
+CV AUC and test AUC should be close. A large gap (test much lower than CV)
+signals overfitting to the training data, or leakage that inflated the CV
+estimate — the model won't reproduce in a new hospital. The gap almost always
+goes one way: the estimate you tuned on is optimistic, the one you didn't touch
+is honest.
+
+**15.**
+
+a. `Id` is a per-patient identifier — a form of **data leakage / a leaky
+feature**. A model that keys off IDs memorizes *these specific patients*
+rather than learning tumor biology; it looks excellent on data containing
+those IDs and collapses on any new cohort, whose IDs it has never seen.
+
+b. The colleague broke the golden rule: **never tune (or model-select) on
+the test set.** By choosing the model with the best test AUC, the test set
+became part of model selection — so the published AUC is optimistically
+biased and will not hold on genuinely new patients. The honest approach:
+select with cross-validation on the training data, then touch the test set
+once.

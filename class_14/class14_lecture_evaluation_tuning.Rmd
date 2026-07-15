@@ -1,0 +1,313 @@
+---
+title: "Evaluating Models & Tuning Them"
+subtitle: "R for Clinicians — live session"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: darkly
+    highlight: zenburn
+    df_print: kable
+---
+
+```{r setup, include=FALSE}
+# Instructor walk-through: every chunk runs top-to-bottom during class.
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 6, fig.height = 4.5, fig.align = "center")
+
+# palette matching the slides, for consistent plots
+col_green <- "#4ade80"; col_cyan <- "#38bdf8"
+col_amber <- "#fbbf24"; col_red  <- "#f87171"
+```
+
+# Setup
+
+```{r libs}
+library(mlbench)   # PimaIndiansDiabetes
+library(caret)     # train(), confusionMatrix(), resamples()
+library(pROC)      # roc(), auc(), coords()
+
+data("PimaIndiansDiabetes")
+d <- PimaIndiansDiabetes
+
+str(d)
+table(d$diabetes)          # pos / neg  — our two classes
+prop.table(table(d$diabetes))
+```
+
+`pos` (diabetes present) is our **positive class** all session. A false
+negative = a diabetic patient told they're fine.
+
+---
+
+# 1 · Split — the lab bench  *(slide 4)*
+
+The test set is opened **once**, at the very end. It stands in for tomorrow's
+patients.
+
+```{r split}
+set.seed(42)
+idx   <- createDataPartition(d$diabetes, p = 0.7, list = FALSE)
+train <- d[idx, ]
+test  <- d[-idx, ]
+
+nrow(train); nrow(test)
+table(test$diabetes)       # our test cohort
+```
+
+`createDataPartition` stratifies — the pos/neg ratio is preserved in both
+sets.
+
+---
+
+# 2 · The accuracy trap  *(slides 5–9)*
+
+## Model A — "everyone's healthy"
+
+```{r modelA}
+# predict the majority class for every patient
+modelA_pred <- factor(rep("neg", nrow(test)), levels = levels(test$diabetes))
+
+confusionMatrix(modelA_pred, test$diabetes, positive = "pos")
+```
+
+Notice the accuracy — it looks respectable, purely because most patients are
+`neg`. Now read the **Sensitivity** line: it is 0. Model A catches no
+diabetics at all. *This is why accuracy alone lies.*
+
+## Model B — our decision tree
+
+```{r modelB}
+fit_tree <- train(diabetes ~ ., data = train, method = "rpart")
+
+pred_B <- predict(fit_tree, newdata = test)
+cm_B   <- confusionMatrix(pred_B, test$diabetes, positive = "pos")
+cm_B
+```
+
+Model B's accuracy may be **lower** than Model A's — yet it's the only one
+that catches any disease. Accuracy is the wrong headline.
+
+---
+
+# 3 · The four numbers  *(slides 10–11)*
+
+Everything comes from the 2×2 table. Let's pull it apart by hand, then check
+against caret.
+
+```{r metrics-by-hand}
+tab <- cm_B$table
+TP <- tab["pos", "pos"]; FN <- tab["neg", "pos"]
+FP <- tab["pos", "neg"]; TN <- tab["neg", "neg"]
+c(TP = TP, FP = FP, FN = FN, TN = TN)
+
+sensitivity <- TP / (TP + FN)   # of the truly sick, how many caught
+specificity <- TN / (TN + FP)   # of the truly healthy, how many cleared
+ppv         <- TP / (TP + FP)   # when it says +, how often right
+c(sensitivity = sensitivity, specificity = specificity, PPV = ppv)
+
+# caret computed the same thing:
+cm_B$byClass[c("Sensitivity", "Specificity", "Pos Pred Value")]
+```
+
+---
+
+# 4 · The threshold is a choice  *(slides 12–13)*
+
+The tree doesn't really output "pos/neg" — it outputs a **probability**, and
+a cutoff turns it into a decision. The default cutoff is 0.5.
+
+```{r probs}
+prob <- predict(fit_tree, newdata = test, type = "prob")[, "pos"]
+head(prob)
+```
+
+Watch what happens to the confusion matrix as we move the line. Same model,
+same probabilities — different decisions.
+
+```{r threshold-sweep}
+make_matrix <- function(p, cutoff) {
+  pred <- factor(ifelse(p > cutoff, "pos", "neg"),
+                 levels = levels(test$diabetes))
+  cm <- confusionMatrix(pred, test$diabetes, positive = "pos")
+  round(cm$byClass[c("Sensitivity", "Specificity")], 3)
+}
+
+rbind(
+  `cutoff 0.5` = make_matrix(prob, 0.5),
+  `cutoff 0.3` = make_matrix(prob, 0.3),
+  `cutoff 0.7` = make_matrix(prob, 0.7)
+)
+```
+
+Drop the cutoff → catch more disease (sensitivity ↑), more false alarms
+(specificity ↓). Raise it → the reverse. **Which line?** is a clinical
+question — hold it.
+
+---
+
+# 5 · ROC & AUC  *(slides 14–16)*
+
+The ROC curve is every cutoff at once. Each point is one confusion matrix.
+
+```{r roc}
+roc_obj <- roc(response  = test$diabetes,
+               predictor = prob,
+               levels    = c("neg", "pos"))
+
+plot(roc_obj, print.auc = TRUE, col = col_green, lwd = 3,
+     legacy.axes = TRUE)     # x = 1 - specificity
+
+auc(roc_obj)
+```
+
+The two cutoffs we computed by hand (0.5 and 0.3) are two points on this
+curve; the line fills in all the others. **AUC** = the whole curve as one
+number — the probability the model ranks a random `pos` above a random `neg`.
+Threshold-free, prevalence-free.
+
+---
+
+# 6 · So — which threshold?  *(slide 17)*
+
+Youden's J = sensitivity + specificity − 1: the point farthest from the
+diagonal. A reasonable default — *not* an answer.
+
+```{r youden}
+coords(roc_obj, x = "best", best.method = "youden",
+       ret = c("threshold", "sensitivity", "specificity"))
+```
+
+This assumes a missed diabetic and a false alarm cost the same. They don't.
+The clinic sets the line; statistics only proposes.
+
+---
+
+# 7 · Don't trust one split — cross-validation  *(slides 20–21)*
+
+Was that AUC skill, or a lucky split? k-fold CV rotates the held-out fold and
+averages, so no single split can fool us. This also becomes the **engine of
+tuning**.
+
+```{r cv-control}
+ctrl <- trainControl(method          = "cv",
+                     number           = 10,
+                     classProbs       = TRUE,        # keep probabilities
+                     summaryFunction  = twoClassSummary)  # report AUC
+
+fit_tree_cv <- train(diabetes ~ ., data = train,
+                     method    = "rpart",
+                     trControl = ctrl,
+                     metric    = "ROC")   # optimize AUC, not accuracy
+
+fit_tree_cv$results
+```
+
+`metric = "ROC"` — the whole first hour in one argument: stop optimizing
+accuracy, optimize AUC.
+
+---
+
+# 8 · Parameters vs hyperparameters  *(slides 24–25)*
+
+Parameters are **learned** from data (the tree's split points). Hyperparameters
+are **chosen** before training (`cp`, the complexity parameter). Tuning =
+searching for the hyperparameter values that maximize cross-validated AUC.
+
+```{r tune-cp}
+grid_cp <- expand.grid(cp = seq(0.001, 0.10, by = 0.005))
+
+fit_tuned <- train(diabetes ~ ., data = train,
+                   method    = "rpart",
+                   trControl = ctrl,
+                   metric    = "ROC",
+                   tuneGrid  = grid_cp)
+
+fit_tuned$bestTune
+plot(fit_tuned)   # the tuning curve — the U-curve in the wild
+```
+
+The peak is `bestTune`. Left of it: underfit. Right: overfit. Same data —
+better dial.
+
+```{r tune-gain}
+c(default_cp_AUC = max(fit_tree_cv$results$ROC),
+  tuned_AUC      = max(fit_tuned$results$ROC))
+```
+
+---
+
+# 9 · One interface, any model  *(slides 29–30)*
+
+The caret contract: change `method` and the grid, keep everything else. Note
+kNN needs `center`/`scale` — and caret applies it **inside each fold**, which
+prevents preprocessing leakage.
+
+```{r other-models}
+fit_knn <- train(diabetes ~ ., data = train,
+                 method     = "knn",
+                 preProcess = c("center", "scale"),
+                 trControl  = ctrl, metric = "ROC",
+                 tuneGrid   = expand.grid(k = seq(3, 31, by = 2)))
+
+fit_rf <- train(diabetes ~ ., data = train,
+                method    = "rf",
+                trControl = ctrl, metric = "ROC",
+                tuneGrid  = expand.grid(mtry = 2:6))
+
+fit_knn$bestTune; fit_rf$bestTune
+```
+
+## Fair comparison — same folds, same metric
+
+```{r resamples}
+res <- resamples(list(tree = fit_tuned, knn = fit_knn, rf = fit_rf))
+summary(res)
+bwplot(res, metric = "ROC")   # look at the spread, not just the means
+```
+
+The winner is the highest mean ROC — but if the boxplots overlap, the gap may
+be noise, and a simpler model is a fair choice.
+
+---
+
+# 10 · The final grade — test set, once  *(slides 31–33)*
+
+Everything above happened **inside the training data** via CV. Only now do we
+open the test set — once — with the model CV chose.
+
+```{r final}
+cv_auc <- c(tree = max(fit_tuned$results$ROC),
+            knn  = max(fit_knn$results$ROC),
+            rf   = max(fit_rf$results$ROC))
+best_name  <- names(which.max(cv_auc))
+best_model <- list(tree = fit_tuned, knn = fit_knn, rf = fit_rf)[[best_name]]
+best_name
+
+# ---- test set opened ONCE ----
+final_pred <- predict(best_model, newdata = test)
+confusionMatrix(final_pred, test$diabetes, positive = "pos")
+
+final_prob <- predict(best_model, newdata = test, type = "prob")[, "pos"]
+final_roc  <- roc(test$diabetes, final_prob, levels = c("neg", "pos"))
+c(test_AUC = as.numeric(auc(final_roc)),
+  cv_AUC   = max(best_model$results$ROC))
+```
+
+If test AUC and CV AUC are close, the estimate is trustworthy. A large drop
+would signal overfitting or leakage — the model wouldn't reproduce in the
+next hospital.
+
+---
+
+# The pipeline, in one place  *(slide 33)*
+
+> **Split → CV + tune → compare → final fit → test once → choose threshold.**
+
+Every honest clinical prediction model can draw this diagram of itself. The
+test set answers exactly one question, exactly once: *how will this model do
+on patients it has never seen?*
+
+```{r session-info}
+sessionInfo()
+```

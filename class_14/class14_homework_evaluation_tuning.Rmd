@@ -1,0 +1,252 @@
+---
+title: "Practice Lab — Evaluating Models & Tuning Them"
+subtitle: "R for Clinicians · self-paced, not submitted"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: darkly
+    highlight: zenburn
+---
+
+```{r setup, include=FALSE}
+# eval = FALSE so this file knits before you write your code.
+# Change to eval = TRUE (or remove) once your code is ready.
+knitr::opts_chunk$set(eval = FALSE, message = FALSE, warning = FALSE)
+```
+
+# How to use this lab
+
+Nothing here is submitted and nothing is graded. This is the lecture pipeline,
+run by your own hands on a dataset you haven't seen — that is the only way the
+ideas stick.
+
+Work one exercise at a time. When you're stuck for more than a few minutes,
+open the walkthrough (`class14_solution_evaluation_tuning.Rmd`) for that
+exercise only, then come back. Reading the walkthrough top to bottom teaches you
+nothing; you'll recognize every line and be able to write none of them.
+
+Each exercise ends with a **Check yourself** box. If your answer to that box is
+"I don't know", that's the signal to go back to the slides — not to move on.
+
+## Packages
+
+Install once, before you start. `caret` doesn't bundle the modeling engines —
+it calls them — so the engines need to be present too:
+
+```{r install, eval=FALSE}
+install.packages(c(
+  "mlbench",       # the datasets
+  "caret",         # the pipeline
+  "pROC",          # ROC / AUC
+  "rpart",         # engine for method = "rpart"
+  "randomForest",  # engine for method = "rf"
+  "e1071",         # caret dependency for confusionMatrix
+  "kknn"           # engine some knn variants need
+))
+```
+
+If `randomForest` fails to compile, use
+`install.packages("randomForest", type = "binary")` on Windows/macOS.
+
+## The data
+
+`BreastCancer` — benign vs malignant tumors from cytology features. The
+cleaning is done for you; run it as-is:
+
+```{r data-prep, eval=TRUE}
+library(mlbench)
+library(caret)
+library(pROC)
+
+data(BreastCancer)
+bc <- BreastCancer
+
+bc$Id <- NULL                                   # Exercise 15 asks why!
+bc[, 1:9] <- lapply(bc[, 1:9],
+                    function(x) as.numeric(as.character(x)))
+bc <- na.omit(bc)
+
+str(bc)          # 9 numeric predictors + Class (benign / malignant)
+table(bc$Class)
+```
+
+Throughout: the **positive class is `"malignant"`** — a false negative means
+telling a patient with cancer that everything is fine.
+
+---
+
+# Part 1 · Split
+
+**1.** Split `bc` into 70% training and 30% test using
+`createDataPartition()`. Set `set.seed(2026)` first so your results are
+reproducible.
+
+```{r ex1}
+# your code here
+```
+
+> **Check yourself:** how many patients in the test set, how many malignant?
+> Is the benign/malignant ratio the same as in the full data — and did you
+> have to do anything to make that happen?
+
+---
+
+# Part 2 · A first model and its confusion matrix
+
+**2.** Train a decision tree (`method = "rpart"`) on the training set with
+default settings, predict classes on the test set, and print the confusion
+matrix with `confusionMatrix(..., positive = "malignant")`.
+
+```{r ex2}
+# your code here
+```
+
+**3.** From the printed table, say TP, FP, FN, TN out loud in plain words
+("X patients with cancer were caught", "Y healthy patients got a false
+alarm", ...).
+
+**4.** Compute sensitivity and specificity **by hand** from those four
+numbers and check that they match caret's output.
+
+```{r ex4}
+# your code here
+```
+
+**5.** In *this* clinical setting, which red cell hurts more — FN or FP?
+
+> **Check yourself:** if your hand-computed sensitivity doesn't match caret's,
+> the usual cause is reading the confusion matrix table in the wrong
+> orientation. Which margin is truth and which is prediction?
+
+---
+
+# Part 3 · The accuracy trap
+
+**6.** "Model A" predicts **benign for every patient**. Compute Model A's
+accuracy on your test set. Compute its sensitivity.
+
+```{r ex6}
+# your code here (hint: table(test$Class) is all you need)
+```
+
+> **Check yourself:** Model A's accuracy is high enough to put in a slide.
+> Can you say in one sentence why that number is a lie?
+
+---
+
+# Part 4 · Thresholds, ROC, AUC
+
+**7.** Get predicted **probabilities** of malignancy on the test set
+(`type = "prob"`), build a ROC object with `pROC::roc()`, plot it, and
+look at the AUC.
+
+```{r ex7}
+# your code here
+```
+
+**8.** Lower the classification threshold from 0.5 to **0.2** and rebuild
+the confusion matrix.
+
+```{r ex8}
+# hint:
+# pred_02 <- factor(ifelse(prob > 0.2, "malignant", "benign"),
+#                   levels = levels(test$Class))
+```
+
+> **Check yourself:** sensitivity moved. Which direction, and what paid for it?
+> Name the price in patients, not in percentage points.
+
+**9.** Use `coords(roc_obj, "best")` to find the Youden-optimal threshold and
+its sensitivity/specificity.
+
+```{r ex9}
+# your code here
+```
+
+> **Check yourself:** Youden treats a missed cancer and a false alarm as
+> equally bad. Give one clinical reason you might deliberately **not** use the
+> Youden threshold in a screening program.
+
+---
+
+# Part 5 · Cross-validation and tuning
+
+**10.** Build a `trainControl` object for **10-fold cross-validation** that
+keeps class probabilities and reports AUC (`twoClassSummary`). Re-train the
+tree with `metric = "ROC"` and a `tuneGrid` for `cp` covering
+`seq(0.0, 0.05, by = 0.005)`. Plot the tuning curve.
+
+```{r ex10}
+# your code here
+```
+
+> **Check yourself:** what does `metric = "ROC"` change about *which* model
+> caret hands back? Does your tuning curve look like the U-curve from the
+> slides — and if it doesn't, is that a bug or a fact about this dataset?
+
+**11.** Tune a **kNN** model over odd values of k from 3 to 31.
+kNN needs one extra argument the tree didn't.
+
+```{r ex11}
+# your code here
+```
+
+> **Check yourself:** which argument, and why does it matter that caret applies
+> it *inside* each fold rather than once on the whole dataset?
+
+**12.** Tune a **random forest** (`method = "rf"`) over `mtry = 2:6`.
+
+```{r ex12}
+# your code here
+```
+
+> **Check yourself:** if this errors with "Required packages are missing:
+> randomForest", you skipped the install chunk. `caret` never bundles engines.
+
+**13.** Compare the three tuned models with `resamples()`.
+
+```{r ex13}
+# your code here
+```
+
+> **Check yourself:** one model has the highest mean CV AUC. Now look at the
+> boxplot spread — is the gap between the best two larger than the
+> fold-to-fold noise? If not, what does "the winner" actually mean?
+
+---
+
+# Part 6 · Opening the test set
+
+**14.** Take the winning model, predict **once** on the test set, and look at
+the final confusion matrix and test AUC. Compare test AUC to CV AUC.
+
+```{r ex14}
+# your code here
+```
+
+> **Check yourself:** are they close? What would a large gap suggest — and in
+> which direction does the gap usually go?
+
+**15.** Two conceptual questions. Write your answers down before you look
+anything up; the writing is the exercise.
+
+a. In the data-prep chunk we deleted the `Id` column before modeling.
+Suppose we had kept it and the model used it. Which lecture concept does
+this violate, and why would the model look great in your report and fail in
+the next hospital?
+
+b. A colleague tunes five models, checks each one's **test-set** AUC, and
+publishes the best. What rule was broken, and what is wrong with the
+published number?
+
+---
+
+# If you only remember three things
+
+1. Accuracy is a headline number that hides the errors that matter. Read the
+   confusion matrix.
+2. The threshold is a clinical decision, not a statistical default. 0.5 is not
+   sacred.
+3. Tune on cross-validation. The test set is opened once, at the end, and never
+   again.

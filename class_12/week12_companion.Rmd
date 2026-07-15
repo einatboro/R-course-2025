@@ -1,0 +1,458 @@
+---
+title: "Publication-Ready Plots in R"
+subtitle: "Week 10 · Part II — Companion Notebook"
+author: "R for Clinical Research"
+date: "`r format(Sys.Date(), '%B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    theme: flatly
+    highlight: tango
+    code_folding: show
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo      = TRUE,
+  message   = FALSE,
+  warning   = FALSE,
+  fig.align = "center",
+  fig.width = 7,
+  fig.height = 4.5,
+  dpi       = 150
+)
+```
+
+# Before you begin
+
+This notebook is the hands-on companion to the **Publication-Ready Plots** lecture.
+By the end you will produce **one PDF figure** at 300 DPI containing three coordinated
+panels — the kind of figure a journal reviewer expects.
+
+## Install the packages (one time)
+
+```{r install, eval=FALSE}
+install.packages(c(
+  "ggplot2",     # the engine
+  "dplyr",       # data wrangling
+  "tidyr",       # drop_na
+  "forcats",     # reordering factors
+  "ggpubr",      # statistical annotations + publication themes
+  "patchwork",   # combining plots
+  "mlbench",     # the dataset for the project (Pima diabetes)
+  "rcartocolor"  # colorblind-safe palettes
+))
+```
+
+## Load everything
+
+```{r libraries}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(forcats)
+library(ggpubr)
+library(patchwork)
+library(mlbench)
+library(rcartocolor)
+```
+
+## Meet the data
+
+We use `PimaIndiansDiabetes2` — the corrected version, where physiologically
+impossible zeros (a glucose of 0, a BMI of 0) are coded as `NA` instead of
+being treated as real measurements.
+
+```{r data-peek}
+data(PimaIndiansDiabetes2)
+
+pima <- PimaIndiansDiabetes2 |>
+  drop_na(glucose, mass, age)   # keep rows complete on the variables we plot
+
+glimpse(pima)
+```
+
+Each row is a woman of Pima heritage. The outcome `diabetes` has two levels
+(`neg` / `pos`), and we have continuous clinical measurements: plasma glucose
+(mg/dL), BMI (kg/m²), diastolic blood pressure (mm Hg), age (years), and more.
+
+---
+
+# Part 01 — The publication standard
+
+## Default vs. polished — see the gap
+
+Let's see how a default `ggplot` looks against a publication-ready version of
+**the exact same data**.
+
+### Default
+
+```{r default-plot}
+ggplot(pima, aes(diabetes, glucose, fill = diabetes)) +
+  geom_boxplot()
+```
+
+This works. But: gray panel, gridlines competing with the data, default
+ggplot palette, no units on the y-axis, redundant legend.
+
+### Publication-ready
+
+```{r polished-plot}
+ggplot(pima, aes(diabetes, glucose)) +
+  geom_boxplot(fill = "#2c3e50", alpha = 0.85, width = 0.5,
+               outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.35, size = 1) +
+  labs(x = NULL, y = "Plasma glucose (mg/dL)") +
+  theme_classic(base_size = 12) +
+  theme(text = element_text(family = "Helvetica"))
+```
+
+Same data, ten lines of code, very different first impression.
+
+---
+
+## Vector vs. raster — pick the right format
+
+| Format | Type   | Use it for                              |
+|--------|--------|-----------------------------------------|
+| PDF    | Vector | Default for journal submission          |
+| SVG    | Vector | Web, post-processing in Illustrator     |
+| PNG    | Raster | Plots that include rendered images      |
+| TIFF   | Raster | Required by some journals (Cell, Nature)|
+| JPEG   | Raster | **Never** — lossy, smears thin lines    |
+
+**Rule:** if the plot is mostly lines, text, and shapes → vector.
+If it contains a rendered image (heatmap, microscopy) → raster at 300 DPI.
+
+---
+
+## Labels with units — the small detail that signals seriousness
+
+```{r labels-good, fig.height=3.5}
+ggplot(pima, aes(glucose, mass)) +
+  geom_point(alpha = 0.5, color = "#22d3ee") +
+  labs(
+    title    = "BMI rises with plasma glucose",
+    subtitle = "Pima Indian diabetes cohort",
+    x        = "Plasma glucose (mg/dL)",
+    y        = "BMI (kg/m²)",
+    caption  = "Source: mlbench::PimaIndiansDiabetes2"
+  ) +
+  theme_classic(base_size = 12)
+```
+
+Every axis has a unit. Title is in sentence case. Subtitle and caption do
+the job a paragraph would do.
+
+---
+
+## Colorblind-safe palettes
+
+```{r palette-comparison, fig.height=3.5}
+# Default — two random hues
+p_default <- ggplot(pima, aes(diabetes, glucose, fill = diabetes)) +
+  geom_boxplot() +
+  labs(title = "Default palette") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "none")
+
+# viridis — survives B&W and colorblind viewers
+p_viridis <- ggplot(pima, aes(diabetes, glucose, fill = diabetes)) +
+  geom_boxplot() +
+  scale_fill_viridis_d(option = "D") +
+  labs(title = "viridis") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "none")
+
+p_default + p_viridis
+```
+
+For categorical variables, prefer `scale_fill_viridis_d()`,
+`scale_fill_brewer(palette = "Set2")`, or `rcartocolor::scale_fill_carto_d(palette = "Safe")`.
+
+---
+
+# Part 02 — Advanced R toolbox
+
+## A reusable theme
+
+Build it once. Save it. Apply it to every plot in the paper.
+
+```{r my-theme}
+my_theme <- theme_classic(base_size = 12) +
+  theme(
+    text             = element_text(family = "Helvetica", color = "grey20"),
+    axis.line        = element_line(color = "black", linewidth = 0.4),
+    axis.ticks       = element_line(color = "black", linewidth = 0.4),
+    panel.grid       = element_blank(),
+    plot.title       = element_text(face = "bold", size = 13),
+    plot.subtitle    = element_text(color = "grey40"),
+    strip.background = element_rect(fill = "grey90", color = NA),
+    strip.text       = element_text(face = "bold"),
+    legend.position  = "bottom",
+    legend.title     = element_blank()
+  )
+```
+
+Test it:
+
+```{r my-theme-test, fig.height=3.5}
+ggplot(pima, aes(glucose, mass, color = diabetes)) +
+  geom_point(alpha = 0.7) +
+  scale_color_carto_d(palette = "Safe") +
+  labs(x = "Plasma glucose (mg/dL)", y = "BMI (kg/m²)") +
+  my_theme
+```
+
+---
+
+## Statistical annotations with `ggpubr`
+
+`stat_compare_means()` adds p-values or significance stars without you
+running the test by hand and pasting the number.
+
+```{r stat-compare, fig.height=4}
+# Significance stars (***, **, *, ns)
+ggplot(pima, aes(diabetes, glucose, fill = diabetes)) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +
+  geom_jitter(width = 0.15, alpha = 0.3, size = 1) +
+  stat_compare_means(
+    comparisons = list(c("neg", "pos")),
+    method = "wilcox.test",
+    label  = "p.signif"
+  ) +
+  scale_fill_carto_d(palette = "Safe") +
+  labs(x = NULL, y = "Plasma glucose (mg/dL)") +
+  my_theme +
+  theme(legend.position = "none")
+```
+
+To show numeric p-values instead of stars: `label = "p.format"`.
+
+With only two groups, one comparison is enough. If you had three or more
+groups, add every pairwise `c()` to `comparisons`, or drop `comparisons`
+entirely and use an overall test (`method = "kruskal.test"`).
+
+---
+
+## Combining plots with `patchwork`
+
+Three operators do everything you need:
+
+```{r patchwork-demo, fig.height=5}
+p1 <- ggplot(pima, aes(glucose)) +
+  geom_histogram(bins = 25, fill = "#22d3ee") +
+  labs(x = "Plasma glucose (mg/dL)", y = "Count") + my_theme
+
+p2 <- ggplot(pima, aes(diabetes, glucose, fill = diabetes)) +
+  geom_boxplot(alpha = 0.6) +
+  scale_fill_carto_d(palette = "Safe") +
+  labs(x = NULL, y = "Plasma glucose (mg/dL)") +
+  my_theme + theme(legend.position = "none")
+
+p3 <- pima |>
+  count(diabetes) |>
+  ggplot(aes(fct_reorder(diabetes, n), n, fill = diabetes)) +
+  geom_col() +
+  scale_fill_carto_d(palette = "Safe") +
+  labs(x = NULL, y = "Patients counted") +
+  my_theme + theme(legend.position = "none")
+
+# Side by side: +
+# Stacked: /
+# Top + bottom-row: p1 / (p2 + p3)
+p1 / (p2 + p3) +
+  plot_annotation(tag_levels = "A")
+```
+
+The `tag_levels = "A"` adds the A/B/C panel labels reviewers will reference.
+
+---
+
+# Part 03 — The mission
+
+> Build a **3-panel PDF figure** from the Pima diabetes cohort.
+> 300 DPI. Coordinated theme. Coordinated palette. One story.
+
+We'll use plasma glucose as the variable of interest and diabetes status as
+the grouping.
+
+## Step 1 — The histogram
+
+```{r mission-histogram, fig.height=3.5}
+p_hist <- ggplot(pima, aes(glucose)) +
+  geom_histogram(
+    aes(y = after_stat(density)),
+    binwidth = 5,                # justify: 5 mg/dL bins match reporting precision
+    fill     = "#94a3b8",
+    color    = "white",
+    linewidth = 0.2
+  ) +
+  geom_density(color = "#0f172a", linewidth = 0.6) +
+  labs(
+    x = "Plasma glucose (mg/dL)",
+    y = "Density"
+  ) +
+  my_theme
+
+p_hist
+```
+
+**Publication checklist for this panel:**
+
+- ☑ binwidth chosen on purpose, not by default
+- ☑ density curve overlay shows shape clearly
+- ☑ axis labels include units
+- ☑ no legend (one variable, one color)
+
+## Step 2 — The boxplot
+
+```{r mission-boxplot, fig.height=3.5}
+p_box <- ggplot(pima, aes(diabetes, glucose, fill = diabetes)) +
+  geom_boxplot(alpha = 0.5, outlier.shape = NA, width = 0.5) +
+  geom_jitter(width = 0.15, alpha = 0.35, size = 1, color = "grey30") +
+  stat_compare_means(
+    comparisons = list(c("neg", "pos")),
+    method = "wilcox.test",
+    label  = "p.signif",
+    size   = 3
+  ) +
+  scale_fill_carto_d(palette = "Safe") +
+  labs(x = NULL, y = "Plasma glucose (mg/dL)") +
+  my_theme +
+  theme(legend.position = "none")
+
+p_box
+```
+
+**Why jitter instead of just a box:** the box hides the raw data. Jittered
+points show the reader the sample size and how dense each group is.
+
+## Step 3 — The bar chart
+
+```{r mission-bars, fig.height=3.5}
+p_bar <- pima |>
+  count(diabetes) |>
+  ggplot(aes(fct_reorder(diabetes, n), n, fill = diabetes)) +
+  geom_col(width = 0.65) +
+  geom_text(aes(label = n), vjust = -0.5, size = 3.5, family = "Helvetica") +
+  scale_fill_carto_d(palette = "Safe") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +
+  labs(x = NULL, y = "Number of patients") +
+  my_theme +
+  theme(legend.position = "none")
+
+p_bar
+```
+
+**The three publication moves:**
+
+- `fct_reorder(diabetes, n)` — bars sorted by value, not alphabetically
+- `geom_text(aes(label = n))` — values printed above each bar
+- `legend.position = "none"` — the x-axis already names the groups
+
+## Step 4 — Final assembly
+
+```{r mission-final, fig.height=6.5, fig.width=8}
+final <- p_hist / (p_box + p_bar) +
+  plot_annotation(
+    title    = "Figure 1. Plasma glucose and diabetes status in the Pima cohort",
+    subtitle = "(A) Distribution of glucose. (B) Glucose by diabetes status. (C) Sample size per group.",
+    tag_levels = "A",
+    theme = theme(
+      plot.title    = element_text(face = "bold", size = 13, family = "Helvetica"),
+      plot.subtitle = element_text(color = "grey40", size = 10, family = "Helvetica")
+    )
+  ) +
+  plot_layout(guides = "collect", heights = c(1, 1.2))
+
+final
+```
+
+## Step 5 — Save it the right way
+
+```{r save-pdf, eval=FALSE}
+ggsave(
+  filename = "figure_1_pima.pdf",
+  plot     = final,
+  width    = 7,        # inches — fits a double-column journal layout
+  height   = 6,
+  units    = "in",
+  dpi      = 300,
+  device   = cairo_pdf # ensures fonts embed cleanly
+)
+```
+
+For a TIFF (some journals require it):
+
+```{r save-tiff, eval=FALSE}
+ggsave(
+  filename    = "figure_1_pima.tiff",
+  plot        = final,
+  width       = 7,
+  height      = 6,
+  units       = "in",
+  dpi         = 300,
+  compression = "lzw"
+)
+```
+
+---
+
+# Part 04 — Peer review checklist
+
+Open your saved PDF at 100% zoom and walk through this list:
+
+- [ ] All text is readable at 100% — no need to zoom in
+- [ ] Every axis has a label with units in parentheses
+- [ ] Color is consistent across all panels (same group → same color)
+- [ ] Figure works in black-and-white print (try grayscale view in your PDF reader)
+- [ ] Panel tags A, B, C are present
+- [ ] Saved at 300 DPI as PDF or TIFF — never JPEG
+- [ ] Filename matches the manuscript reference (`figure_1_pima.pdf`)
+
+If any item fails, fix the figure — not the manuscript text.
+
+---
+
+# Bonus — your own theme as a function
+
+For long-term reuse, wrap the theme in a function:
+
+```{r theme-function, eval=FALSE}
+theme_paper <- function(base_size = 12) {
+  theme_classic(base_size = base_size) +
+    theme(
+      text             = element_text(family = "Helvetica", color = "grey20"),
+      axis.line        = element_line(color = "black", linewidth = 0.4),
+      panel.grid       = element_blank(),
+      plot.title       = element_text(face = "bold"),
+      strip.background = element_rect(fill = "grey90", color = NA),
+      legend.position  = "bottom",
+      legend.title     = element_blank()
+    )
+}
+
+# Use it:
+ggplot(pima, aes(...)) + ... + theme_paper()
+
+# Or with a different base size for slides:
+ggplot(pima, aes(...)) + ... + theme_paper(base_size = 16)
+```
+
+Drop this into a small `R/themes.R` file in every project and `source()` it.
+That is how labs achieve consistency across a whole paper.
+
+---
+
+# Resources
+
+- **R Graph Gallery** — r-graph-gallery.com
+- **From Data to Viz** — data-to-viz.com
+- **ggplot2 book** (Wickham et al.) — ggplot2-book.org
+- **Fundamentals of Data Visualization** (Claus Wilke) — clauswilke.com/dataviz
+- **ggpubr** documentation — rpkgs.datanovia.com/ggpubr
+- **patchwork** documentation — patchwork.data-imaginist.com

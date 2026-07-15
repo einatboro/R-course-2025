@@ -1,0 +1,139 @@
+---
+title: "Homework — Publication-Ready Plots"
+subtitle: "Week 10 · Part II"
+author: "Your name"
+date: "`r format(Sys.Date(), '%B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    highlight: tango
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, message = FALSE, warning = FALSE,
+  fig.align = "center", fig.width = 7, fig.height = 4.5, dpi = 150
+)
+```
+
+# Setup
+
+```{r libraries}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(forcats)
+library(ggpubr)
+library(patchwork)
+library(mlbench)
+library(rcartocolor)
+
+data(PimaIndiansDiabetes2)
+```
+
+The deliverable is **one PDF figure**, 300 DPI, three panels, one story.
+The story this time is **BMI**, not glucose.
+
+---
+
+## Q1 — Prepare the data (10 pts)
+
+Starting from `PimaIndiansDiabetes2`:
+
+a. Keep only rows with complete `mass`, `glucose`, `age`, `diabetes`.
+b. Create `age_group`: a factor with levels `"21-30"`, `"31-40"`, `"41-50"`, `"51+"`.
+c. Report how many rows you dropped and how many remain per `age_group`.
+
+**Write one sentence** on why dropping incomplete rows here could bias the figure.
+
+```{r q1}
+# your code
+
+```
+
+---
+
+## Q2 — Your theme (10 pts)
+
+Write `theme_hw()` — a function with a `base_size` argument, built on
+`theme_classic()`, with: no panel grid, bold title, black axis lines,
+legend at the bottom, no legend title.
+
+Every plot below must use it.
+
+```{r q2}
+# your code
+
+```
+
+---
+
+## Q3 — Panel A: distribution (15 pts)
+
+Histogram of `mass` with a density overlay.
+
+- Choose a `binwidth` **and justify it in one sentence**.
+- Axis labels with units.
+- No legend.
+
+```{r q3}
+# your code
+
+```
+
+---
+
+## Q4 — Panel B: BMI by age group and diabetes status (20 pts)
+
+Boxplot of `mass` by `age_group`, filled by `diabetes`, with jittered points
+(use `position_jitterdodge()` so points land on their own box).
+
+- Colorblind-safe fill palette.
+- Add a Wilcoxon test comparing `neg` vs `pos` **within each age group**
+  (hint: `stat_compare_means(aes(group = diabetes), label = "p.signif")`).
+
+```{r q4}
+# your code
+
+```
+
+---
+
+## Q5 — Panel C: prevalence, not counts (20 pts)
+
+For each `age_group`, compute the **percentage** of patients with `diabetes == "pos"`.
+Plot it as a bar chart.
+
+- Bars in age order (not sorted by value — order matters here; say why in one sentence).
+- Percentage printed above each bar, one decimal.
+- Y axis expanded so labels are not clipped.
+
+```{r q5}
+# your code
+
+```
+
+---
+
+## Q6 — Assemble and export (20 pts)
+
+- Layout: A on top, B and C on the bottom row.
+- `plot_annotation()` with a title, a subtitle describing each panel, and tags A/B/C.
+- Save as `figure_hw_pima.pdf`, 7 × 6 in, 300 DPI, `cairo_pdf`.
+
+```{r q6}
+# your code
+
+```
+
+---
+
+## Q7 — Peer review (5 pts)
+
+Open your PDF at 100% zoom. Run the Part 04 checklist from the companion
+notebook. List any item that failed and what you changed.
+
+*your answer here*
